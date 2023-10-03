@@ -33,8 +33,7 @@ jobs:
 
       - name: Build and test docker image
         run: |
-          docker-compose build
-          docker build service-app -t mock-onelogin
+          docker build one-login -t mock-onelogin
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
