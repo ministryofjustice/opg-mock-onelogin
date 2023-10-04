@@ -2,10 +2,10 @@ terraform {
 
   backend "s3" {
     bucket         = "opg.terraform.state"
-    key            = "github-workflow-example-account/terraform.tfstate"
+    key            = "opg-mock-onelogin/terraform.tfstate"
     encrypt        = true
     region         = "eu-west-1"
-    role_arn       = "arn:aws:iam::311462405659:role/gh-workflow-example-ci"
+    role_arn       = "arn:aws:iam::311462405659:role/shared-ci"
     dynamodb_table = "remote_lock"
   }
 
@@ -19,7 +19,7 @@ terraform {
       version = "4.11.0"
     }
   }
-  required_version = ">= 1.1.0"
+  required_version = ">= 1.5.7"
 }
 
 provider "github" {
@@ -51,7 +51,7 @@ variable "aws_secret_access_key" {
 }
 
 variable "DEFAULT_ROLE" {
-  default = "gh-workflow-example-ci"
+  default = "shared-ci"
 }
 
 
