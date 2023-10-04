@@ -1,0 +1,108 @@
+name: "[Workflow] Pull Request"
+
+on:
+  workflow_call:
+    inputs:
+        build_latest:
+            description: 'Branch name'
+            type: boolean
+            default: false
+        semvar_tag:
+            description: 'Semvar tag'
+            required: true
+            type: string
+
+permissions:
+  id-token: write
+  contents: write
+  security-events: write
+  pull-requests: write
+  actions: none
+  checks: none
+  deployments: none
+  issues: write
+  packages: none
+  repository-projects: none
+  statuses: none
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build_scan_push:
+    name: "Docker build, trivy scan, ECR push"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        data:
+          - docker_build_directory: "./docker/mock-onelogin"
+            image_app_name: "mock-onelogin"
+            ecr_repository: "use_an_lpa/mock_onelogin_app"
+    env:
+      sarif_file: trivy-results.sarif
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: unfor19/install-aws-cli-action@v1
+
+      - name: Configure AWS Credentials With Assumed Role to Management
+        uses: aws-actions/configure-aws-credentials@v1.6.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_ACTIONS }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_ACTIONS }}
+          aws-region: eu-west-1
+          role-to-assume: arn:aws:iam::311462405659:role/shared-ci
+          role-duration-seconds: 900
+          role-session-name: OPGMockOneLoginCIPipeline
+
+      - name: ECR Login
+        id: login_ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.1
+        with:
+          registries: 311462405659
+
+      - name: Generate tags for Docker
+        env:
+          SEMVAR_TAG: ${{ inputs.semvar_tag }}
+          ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ matrix.data.ecr_repository }}
+        id: docker_tags
+        run:
+          if [[ ${{ inputs.build_latest }} == "true" ]]; then
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}"  >> $GITHUB_OUTPUT
+          else
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}" >> $GITHUB_OUTPUT
+          fi
+          echo "semvar_tag=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.data.docker_build_directory }}/Dockerfile
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.5.1
+        with:
+          image-ref: ${{ steps.docker_tags.outputs.semvar_tag }}
+          severity: "HIGH,CRITICAL"
+          format: 'sarif'
+          output: ${{ env.sarif_file }}
+
+      - name: Trivy scan upload to github
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: ${{ env.sarif_file }}
