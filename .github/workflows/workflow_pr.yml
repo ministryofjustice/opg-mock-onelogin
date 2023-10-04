@@ -73,9 +73,8 @@ jobs:
       # build our sample docker image
       - name: Docker build
         # set the working directory to the variable
-        working-directory: ${{ matrix.data.docker_build_directory }}
         run: |
-          docker build -t ${{ env.local_docker_image }} .
+          docker build -f ${{ matrix.data.docker_build_directory }} -t ${{ env.local_docker_image }} .
       # to check if things worked, output docker image list
       - name: Docker image list
         run: |
