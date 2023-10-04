@@ -1,7 +1,7 @@
-name: "[Workflow] Pull Request"
+name: "[Workflow] Path to Live"
 
 on:
-  pull_request:
+  push:
     branches:
       - main
 
@@ -50,17 +50,20 @@ jobs:
   build_scan_push:
     name: "Docker build, trivy scan, ECR push"
     runs-on: ubuntu-latest
+    # require all steps before this matrix to have passed
     needs: [branch_name, workspace_name, semvar_tag]
     strategy:
       fail-fast: true
       matrix:
+        # services to scan over
         data:
           - docker_build_directory: "./docker/mock-onelogin"
-            image_app_name: "mock-onelogin"    
+            image_app_name: "mock-onelogin"
+    # we use these a few times, so its easier to generate them once and env
+    # vars are visible in the output, so helps with debug
     env:
       local_docker_image: ${{ matrix.data.image_app_name }}:latest
       sarif_file: trivy-results.sarif
-
     steps:
       - uses: actions/checkout@v3
       - name: Show environment values
@@ -72,7 +75,6 @@ jobs:
         # set the working directory to the variable
         run: |
           docker build -f ${{ matrix.data.docker_build_directory }}/Dockerfile -t ${{ env.local_docker_image }} .
-
       - name: Trivy scan
         uses: aquasecurity/trivy-action@0.5.1
         with:
@@ -85,7 +87,9 @@ jobs:
         if: always()
         with:
           sarif_file: ${{ env.sarif_file }}
-
+      ######
+      ## Push to ECR
+      ######
       - uses: unfor19/install-aws-cli-action@v1
       - name: Configure AWS Credentials With Assumed Role to Management
         uses: aws-actions/configure-aws-credentials@v1.6.1
@@ -110,6 +114,7 @@ jobs:
           docker tag ${{ env.local_docker_image }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}
           docker tag ${{ env.local_docker_image }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
+          
 
   end:
     name: 'End of workflow'
