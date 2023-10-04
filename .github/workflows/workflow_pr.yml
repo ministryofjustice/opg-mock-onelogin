@@ -74,11 +74,7 @@ jobs:
       - name: Docker build
         # set the working directory to the variable
         run: |
-          docker build -f ${{ matrix.data.docker_build_directory }} -t ${{ env.local_docker_image }} .
-      # to check if things worked, output docker image list
-      - name: Docker image list
-        run: |
-          docker images
+          docker build -f ${{ matrix.data.docker_build_directory }}/Dockerfile -t ${{ env.local_docker_image }} .
       - name: Trivy scan
         uses: aquasecurity/trivy-action@0.5.1
         with:
