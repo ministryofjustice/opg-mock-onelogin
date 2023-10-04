@@ -74,7 +74,7 @@ jobs:
           docker build -f ${{ matrix.data.docker_build_directory }}/Dockerfile -t ${{ env.local_docker_image }} .
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.5.1
+        uses: aquasecurity/trivy-action@0.12.0
         with:
           image-ref: ${{ env.local_docker_image }}
           severity: "HIGH,CRITICAL"
