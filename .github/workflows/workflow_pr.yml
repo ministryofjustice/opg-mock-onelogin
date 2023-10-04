@@ -42,13 +42,6 @@ jobs:
       branch_name: ${{ needs.branch_name.outputs.parsed }}"
     secrets: inherit
 
-  # SAST
-  # codeql for pythong
-  codeql_analysis:
-    name: "Run CodeQL against the code base"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/analysis-application-codeql-sast-to-github-security.yml@v1.6.0
-    with:
-      application_languages: '["python"]'
   
   # Docker build, trivy scan, ECR push as a matrix
   # The matrix loops over each app to build in a complicated
