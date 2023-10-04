@@ -64,7 +64,7 @@ jobs:
     uses: ministryofjustice/opg-github-workflows/.github/workflows/linting-infrastructure-terraform.yml@v1.6.0
     with:
       directory: "./terraform"
-      terraform_version: "1.1.5"
+      terraform_version: "1.5.7"
       terraform_wrapper: false
 
   # run linting for python
@@ -73,7 +73,7 @@ jobs:
     uses: ministryofjustice/opg-github-workflows/.github/workflows/linting-application-python.yml@v1.6.0
     with:
       directory: "./service-app"
-      python_version: "3.10.2"
+      python_version: "3.10"
 
   # SAST
   # codeql for pythong
