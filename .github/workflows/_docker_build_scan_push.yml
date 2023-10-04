@@ -71,12 +71,12 @@ jobs:
           ECR_REPOSITORY: ${{ matrix.data.ecr_repository }}
         id: docker_tags
         run:
-          if [[ ${{ inputs.build_latest }} == "true" ]]; then
-            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}"  >> $GITHUB_OUTPUT
+          if ${{ inputs.build_latest }}; then
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
           else
-            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}" >> $GITHUB_OUTPUT
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
           fi
-          echo "semvar_tag=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}" >> $GITHUB_OUTPUT
+          echo "semvar_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
