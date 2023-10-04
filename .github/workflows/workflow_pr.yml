@@ -51,7 +51,7 @@ jobs:
     name: "Docker build, trivy scan, ECR push"
     runs-on: ubuntu-latest
     # require all steps before this matrix to have passed
-    needs: [branch_name, workspace_name, semvar_tag, codeql_analysis]
+    needs: [branch_name, workspace_name, semvar_tag]
     strategy:
       fail-fast: true
       matrix:
