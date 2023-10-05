@@ -23,17 +23,10 @@ defaults:
     shell: bash
 
 jobs:
-  # generate a branch name  
   branch_name:
     name: "Generate a safe branch name"
     uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-branch-name.yml@main
-  
-  # generate workspace name
-  workspace_name:
-    name: "Generate the workspace name"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-workspace.yml@main
-  
-  # generate smevar tag
+
   semvar_tag:
     needs: [branch_name]
     name: "Generate the semvar tag value"
@@ -42,79 +35,19 @@ jobs:
       branch_name: "${{ needs.branch_name.outputs.parsed }}"
     secrets: inherit
 
-  
-  # Docker build, trivy scan, ECR push as a matrix
-  # The matrix loops over each app to build in a complicated
-  # structure
-  # ADD IN ECR PUSH
   build_scan_push:
-    name: "Docker build, trivy scan, ECR push"
-    runs-on: ubuntu-latest
-    needs: [branch_name, workspace_name, semvar_tag]
-    strategy:
-      fail-fast: true
-      matrix:
-        data:
-          - docker_build_directory: "./docker/mock-onelogin"
-            image_app_name: "mock-onelogin"    
-    env:
-      local_docker_image: ${{ matrix.data.image_app_name }}:latest
-      sarif_file: trivy-results.sarif
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Show environment values
-        run: |
-          echo "local_docker_image: ${{ env.local_docker_image }}"
-          echo "sarif_file: ${{ env.sarif_file }}"
-      # build our sample docker image
-      - name: Docker build
-        # set the working directory to the variable
-        run: |
-          docker build -f ${{ matrix.data.docker_build_directory }}/Dockerfile -t ${{ env.local_docker_image }} .
-
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.5.1
-        with:
-          image-ref: ${{ env.local_docker_image }}
-          severity: "HIGH,CRITICAL"
-          format: 'sarif'
-          output: ${{ env.sarif_file }}
-      - name: Trivy scan upload to github
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: ${{ env.sarif_file }}
-
-      - uses: unfor19/install-aws-cli-action@v1
-      - name: Configure AWS Credentials With Assumed Role to Management
-        uses: aws-actions/configure-aws-credentials@v1.6.1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_ACTIONS }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_ACTIONS }}
-          aws-region: eu-west-1
-          role-to-assume: arn:aws:iam::311462405659:role/shared-ci
-          role-duration-seconds: 900
-          role-session-name: OPGMockOneLoginCIPipeline
-      - name: ECR Login
-        id: login_ecr
-        uses: aws-actions/amazon-ecr-login@v1.5.1
-        with:
-          registries: 311462405659
-      - name: Push Container
-        env:
-          SEMVAR_TAG: ${{ needs.semvar_tag.outputs.tag }}
-          ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
-          ECR_REPOSITORY: use_an_lpa/mock_onelogin_app
-        run: |
-          docker tag ${{ env.local_docker_image }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.SEMVAR_TAG }}
-          docker tag ${{ env.local_docker_image }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
+    needs: [branch_name, semvar_tag]
+    name: "Build, scan and push the image"
+    uses: ./.github/workflows/_docker_build_scan_push.yml
+    with:
+      build_latest: false
+      semvar_tag: "${{ needs.semvar_tag.outputs.tag }}"
+    secrets: inherit
 
   end:
     name: 'End of workflow'
     runs-on: 'ubuntu-latest'
-    needs: [branch_name, workspace_name, semvar_tag, build_scan_push]
+    needs: [branch_name, semvar_tag, build_scan_push]
     steps:
       - name: "Output data"
         run: |
@@ -122,11 +55,5 @@ jobs:
           echo "Raw: ${{ needs.branch_name.outputs.raw }}"
           echo "Parsed: ${{ needs.branch_name.outputs.parsed }}"
           echo "Alphanumeric: ${{ needs.branch_name.outputs.alphanumeric }}"
-          echo "== WORKSPACE =="
-          echo "Name: ${{ needs.workspace_name.outputs.name }}"
           echo "== SEMVAR =="
           echo "Tag: ${{ needs.semvar_tag.outputs.tag }}"
-          
-
-
-
