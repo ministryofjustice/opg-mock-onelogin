@@ -22,12 +22,13 @@ var (
 	publicURL          = env.Get("PUBLIC_URL", "http://localhost:8080")
 	internalURL        = env.Get("INTERNAL_URL", "http://mock-onelogin:8080")
 	clientId           = env.Get("CLIENT_ID", "theClientId")
-	serviceRedirectUrl = env.Get("REDIRECT_RUL", "http://localhost:5050/auth/redirect")
+	serviceRedirectUrl = env.Get("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 
 	nonce          string
 	returnIdentity = false
 	signingKid     = "my-kid"
 	signingKey, _  = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	sub            = "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ=="
 )
 
 type OpenIdConfig struct {
@@ -78,7 +79,7 @@ func createSignedToken(clientId, issuer string) (string, error) {
 	t.Header["kid"] = signingKid
 
 	t.Claims = jwt.MapClaims{
-		"sub":   fmt.Sprintf("%s-sub", randomString(10)),
+		"sub":   sub,
 		"iss":   issuer,
 		"nonce": nonce,
 		"aud":   clientId,
@@ -158,7 +159,7 @@ func authorize() http.HandlerFunc {
 		q.Set("code", code)
 		q.Set("state", r.FormValue("state"))
 
-		if r.FormValue("vtr") == "[Cl.Cm.P2]" && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}` {
+		if r.FormValue("vtr") == "[\"Cl.Cm.P2\"]" && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}` {
 			returnIdentity = true
 		}
 
@@ -173,8 +174,8 @@ func authorize() http.HandlerFunc {
 func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userInfo := UserInfoResponse{
-			Sub:           randomString(12),
-			Email:         "simulate-delivered@notifications.service.gov.uk",
+			Sub:           sub,
+			Email:         "opg-use-an-lpa+test-user@digital.justice.gov.uk",
 			EmailVerified: true,
 			Phone:         "01406946277",
 			PhoneVerified: true,
@@ -210,6 +211,25 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 	}
 }
 
+func logout() http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("/logout was called")
+		postLogoutRedirectUri := r.FormValue("post_logout_redirect_uri")
+
+		if postLogoutRedirectUri == "" {
+			log.Fatal("Required query param 'post_logout_redirect_uri' missing from request")
+		}
+
+		u, parseErr := url.Parse(postLogoutRedirectUri)
+		if parseErr != nil {
+			log.Fatalf("Error parsing redirect_uri: %s", parseErr)
+		}
+
+		log.Printf("Redirecting to %s", u.String())
+		http.Redirect(w, r, u.String(), 302)
+    }
+}
+
 func main() {
 	flag.Parse()
 
@@ -229,6 +249,7 @@ func main() {
 	http.HandleFunc("/authorize", authorize())
 	http.HandleFunc("/token", token(clientId, c.Issuer))
 	http.HandleFunc("/userinfo", userInfo(privateKey))
+	http.HandleFunc("/logout", logout())
 
 	log.Println("GOV UK Sign in mock initialized")
 
