@@ -94,7 +94,7 @@ jobs:
           tags: ${{ steps.docker_tags.outputs.tags }}
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.13.1
+        uses: aquasecurity/trivy-action@0.14.0
         with:
           image-ref: ${{ steps.docker_tags.outputs.semvar_tag }}
           severity: "HIGH,CRITICAL"
