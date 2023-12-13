@@ -4,10 +4,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
+	gotemplate "html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/ministryofjustice/opg-go-common/env"
+	"github.com/ministryofjustice/opg-go-common/template"
 )
 
 var (
@@ -24,12 +27,24 @@ var (
 	clientId           = env.Get("CLIENT_ID", "theClientId")
 	serviceRedirectUrl = env.Get("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 
-	nonce          string
 	returnIdentity = false
 	signingKid     = "my-kid"
 	signingKey, _  = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	sub            = "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ=="
+	//sub            = "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ=="
+
+	sessions = map[string]sessionData{}
+	tokens   = map[string]sessionData{}
+
+	templates = template.Templates{}
+	email     string
+	sub       string
 )
+
+type sessionData struct {
+	user     string
+	nonce    string
+	identity bool
+}
 
 type OpenIdConfig struct {
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
@@ -87,7 +102,7 @@ func randomString(length int) string {
 	return stringWithCharset(length, charset)
 }
 
-func createSignedToken(clientId, issuer string) (string, error) {
+func createSignedToken(nonce, clientId, issuer string) (string, error) {
 	t := jwt.New(jwt.SigningMethodES256)
 
 	t.Header["kid"] = signingKid
@@ -136,7 +151,14 @@ func jwks() http.HandlerFunc {
 
 func token(clientId, issuer string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		t, err := createSignedToken(clientId, issuer)
+		code := r.PostFormValue("code")
+		accessToken := randomString(10)
+
+		session := sessions[code]
+		delete(sessions, code)
+		tokens[accessToken] = session
+
+		t, err := createSignedToken(session.nonce, clientId, issuer)
 		if err != nil {
 			log.Fatalf("Error creating JWT: %s", err)
 		}
@@ -153,7 +175,28 @@ func authorize() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("/authorize")
 
-		nonce = r.FormValue("nonce")
+		returnIdentity := r.FormValue("vtr") == "[\"Cl.Cm.P2\"]" && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}`
+
+		if r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}` {
+			returnIdentity = true
+		}
+
+		if r.Method == http.MethodGet && returnIdentity {
+			t := templates.Get("home.page.gohtml")
+			if err := t(w, nil); err != nil {
+				log.Fatal("Failed to render template")
+			}
+			return
+		}
+
+		if r.Method == http.MethodPost {
+			email = r.FormValue("email")
+			h := sha256.New()
+			h.Write([]byte(email))
+			encoded := base64.StdEncoding.EncodeToString(h.Sum(nil))
+			sub = "urn:fdc:mock-one-login:2023:" + encoded
+			log.Println(sub)
+		}
 
 		redirectUri := r.FormValue("redirect_uri")
 		if redirectUri == "" {
@@ -175,13 +218,15 @@ func authorize() http.HandlerFunc {
 		q.Set("code", code)
 		q.Set("state", r.FormValue("state"))
 
-		if r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}` {
-			returnIdentity = true
+		sessions[code] = sessionData{
+			nonce:    r.FormValue("nonce"),
+			user:     r.FormValue("user"),
+			identity: returnIdentity,
 		}
 
 		u.RawQuery = q.Encode()
 
-		log.Printf("Redirecting to %s with nonce %s", u.String(), nonce)
+		log.Printf("Redirecting to %s with nonce %s", u.String(), sessions[code].nonce)
 
 		http.Redirect(w, r, u.String(), 302)
 	}
@@ -189,8 +234,10 @@ func authorize() http.HandlerFunc {
 
 func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+
+		//hard coded values need to pull out
 		userInfo := UserInfoResponse{
-			Sub:           sub,
+			Sub:           "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ==",
 			Email:         "opg-use-an-lpa+test-user@digital.justice.gov.uk",
 			EmailVerified: true,
 			Phone:         "01406946277",
@@ -269,6 +316,12 @@ func main() {
 		TokenEndpoint:         internalURL + "/token",
 		UserinfoEndpoint:      internalURL + "/userinfo",
 		JwksURI:               internalURL + "/.well-known/jwks",
+	}
+
+	var err error
+	templates, err = template.Parse("web/templates", gotemplate.FuncMap{})
+	if err != nil {
+		panic(err)
 	}
 
 	privateKeyBytes, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSVBheDJBYW92aXlQWDF3cndmS2FWckxEOHdQbkpJcUlicTMzZm8rWHdBZDdvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSlEyVmtpZWtzNW9rSTIxY1Jma0FhOXVxN0t4TTZtMmpaWUJ4cHJsVVdCWkNFZnhxMjdwVQp0Qzd5aXplVlRiZUVqUnlJaStYalhPQjFBbDhPbHFtaXJnPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")

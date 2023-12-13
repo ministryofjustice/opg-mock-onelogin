@@ -1,0 +1,20 @@
+{{ template "page" . }}
+{{ define "content" }}
+<h1>Mock GOV.UK One Login</h1>
+<form method="post">
+    <label><input type="radio" name="user" value="opg-use-an-lpa+test-user@digital.justice.gov.uk" />Sam Smith (donor)</label><br/>
+    <label><input type="radio" name="user" value="certificate-provider" />Charlie Cooper (certificate provider)</label><br/>
+    <label><input type="radio" name="user" value="random" />Somebody Else (a random person)</label><br/>
+
+    <label>Email
+        <input type="text" name="email" value="opg-use-an-lpa+test-user@digital.justice.gov.uk"/>
+    </label><br />
+
+{{/*    have an e-mail --- but would it be better to have checkboxes ?*/}}
+{{/*    create a sub */}}
+{{/*    new user */}}
+
+
+	<button type="submit">Sign in</button>
+</form>
+{{ end }}
