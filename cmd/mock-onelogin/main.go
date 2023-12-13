@@ -45,6 +45,12 @@ type TokenResponse struct {
 	IDToken     string `json:"id_token"`
 }
 
+type JWTIdToken struct {
+	jwt.RegisteredClaims
+
+	Nonce string `json:"nonce"`
+}
+
 type UserInfoResponse struct {
 	Sub             string `json:"sub"`
 	Email           string `json:"email"`
@@ -53,6 +59,14 @@ type UserInfoResponse struct {
 	PhoneVerified   bool   `json:"phone_verified"`
 	UpdatedAt       int    `json:"updated_at"`
 	CoreIdentityJWT string `json:"https://vocab.account.gov.uk/v1/coreIdentityJWT,omitempty"`
+}
+
+type JWTCoreIdentity struct {
+	jwt.RegisteredClaims
+
+	VectorOfTrust        string         `json:"vot,omitempty"`
+	VectorTrustMark      string         `json:"vtm,omitempty"`
+	VerifiableCredential map[string]any `json:"vc,omitempty"`
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -78,13 +92,15 @@ func createSignedToken(clientId, issuer string) (string, error) {
 
 	t.Header["kid"] = signingKid
 
-	t.Claims = jwt.MapClaims{
-		"sub":   sub,
-		"iss":   issuer,
-		"nonce": nonce,
-		"aud":   clientId,
-		"exp":   time.Now().Add(time.Minute * 5).Unix(),
-		"iat":   time.Now().Unix(),
+	t.Claims = JWTIdToken{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    issuer,
+			Subject:   sub,
+			Audience:  []string{clientId},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 3)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+		Nonce: nonce,
 	}
 
 	return t.SignedString(signingKey)
@@ -159,13 +175,13 @@ func authorize() http.HandlerFunc {
 		q.Set("code", code)
 		q.Set("state", r.FormValue("state"))
 
-		if r.FormValue("vtr") == "[\"Cl.Cm.P2\"]" && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}` {
+		if r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}` {
 			returnIdentity = true
 		}
 
 		u.RawQuery = q.Encode()
 
-		log.Printf("Redirecting to %s", u.String())
+		log.Printf("Redirecting to %s with nonce %s", u.String(), nonce)
 
 		http.Redirect(w, r, u.String(), 302)
 	}
@@ -183,10 +199,22 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 		}
 
 		if returnIdentity {
-			userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
-				"iat": time.Now().Add(-time.Minute).Unix(),
-				"vc": map[string]any{
-					"type": []string{},
+			claims := JWTCoreIdentity{
+				RegisteredClaims: jwt.RegisteredClaims{
+					Issuer:    "https://identity.account.gov.uk/", // production identity url
+					Subject:   sub,
+					Audience:  []string{clientId},
+					ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 3)),
+					IssuedAt:  jwt.NewNumericDate(time.Now()),
+					NotBefore: jwt.NewNumericDate(time.Now()),
+				},
+				VectorOfTrust:   "P2",
+				VectorTrustMark: "https://oidc.account.gov.uk/trustmark", // production trustmark url
+				VerifiableCredential: map[string]any{
+					"type": []string{
+						"VerifiableCredential",
+						"VerifiableIdentityCredential",
+					},
 					"credentialSubject": map[string]any{
 						"name": []map[string]any{
 							{
@@ -204,7 +232,9 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 						},
 					},
 				},
-			}).SignedString(privateKey)
+			}
+
+			userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
 		}
 
 		json.NewEncoder(w).Encode(userInfo)
@@ -212,7 +242,7 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 }
 
 func logout() http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("/logout was called")
 		postLogoutRedirectUri := r.FormValue("post_logout_redirect_uri")
 
@@ -227,7 +257,7 @@ func logout() http.HandlerFunc {
 
 		log.Printf("Redirecting to %s", u.String())
 		http.Redirect(w, r, u.String(), 302)
-    }
+	}
 }
 
 func main() {
@@ -243,6 +273,8 @@ func main() {
 
 	privateKeyBytes, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSVBheDJBYW92aXlQWDF3cndmS2FWckxEOHdQbkpJcUlicTMzZm8rWHdBZDdvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSlEyVmtpZWtzNW9rSTIxY1Jma0FhOXVxN0t4TTZtMmpaWUJ4cHJsVVdCWkNFZnhxMjdwVQp0Qzd5aXplVlRiZUVqUnlJaStYalhPQjFBbDhPbHFtaXJnPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
 	privateKey, _ := jwt.ParseECPrivateKeyFromPEM(privateKeyBytes)
+
+	jwt.MarshalSingleStringAsArray = false
 
 	http.HandleFunc("/.well-known/openid-configuration", openIDConfig(c))
 	http.HandleFunc("/.well-known/jwks", jwks())
