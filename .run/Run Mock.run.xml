@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run Mock" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="opg-mock-onelogin" />
+    <working_directory value="$PROJECT_DIR$" />
+    <envs>
+      <env name="CLIENT_ID" value="client-id" />
+      <env name="INTERNAL_URL" value="http://host.docker.internal:8080" />
+      <env name="REDIRECT_URL" value="https://localhost:9042/home/login" />
+    </envs>
+    <kind value="FILE" />
+    <package value="github.com/ministryofjustice/opg-mock-onelogin" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/mock-onelogin/main.go" />
+    <method v="2" />
+  </configuration>
+</component>
