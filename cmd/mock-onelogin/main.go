@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -27,22 +28,20 @@ var (
 	clientId           = env.Get("CLIENT_ID", "theClientId")
 	serviceRedirectUrl = env.Get("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 
-	returnIdentity = false
-	signingKid     = "my-kid"
-	signingKey, _  = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	//sub            = "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ=="
+	signingKid    = "my-kid"
+	signingKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 
 	sessions = map[string]sessionData{}
 	tokens   = map[string]sessionData{}
 
 	templates = template.Templates{}
-	email     string
-	sub       string
 )
 
 type sessionData struct {
-	user     string
+	email    string
 	nonce    string
+	sub      string
+	user     string
 	identity bool
 }
 
@@ -102,7 +101,7 @@ func randomString(length int) string {
 	return stringWithCharset(length, charset)
 }
 
-func createSignedToken(nonce, clientId, issuer string) (string, error) {
+func createSignedToken(nonce, sub, clientId, issuer string) (string, error) {
 	t := jwt.New(jwt.SigningMethodES256)
 
 	t.Header["kid"] = signingKid
@@ -158,7 +157,7 @@ func token(clientId, issuer string) http.HandlerFunc {
 		delete(sessions, code)
 		tokens[accessToken] = session
 
-		t, err := createSignedToken(session.nonce, clientId, issuer)
+		t, err := createSignedToken(session.nonce, session.sub, clientId, issuer)
 		if err != nil {
 			log.Fatalf("Error creating JWT: %s", err)
 		}
@@ -175,27 +174,18 @@ func authorize() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("/authorize")
 
-		returnIdentity := r.FormValue("vtr") == "[\"Cl.Cm.P2\"]" && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}`
+		returnIdentity := r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}`
 
-		if r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}` {
-			returnIdentity = true
-		}
-
-		if r.Method == http.MethodGet && returnIdentity {
+		if r.Method == http.MethodGet {
 			t := templates.Get("home.page.gohtml")
-			if err := t(w, nil); err != nil {
+			if err := t(w, struct {
+				ReturnIdentity bool
+			}{
+				ReturnIdentity: returnIdentity,
+			}); err != nil {
 				log.Fatal("Failed to render template")
 			}
 			return
-		}
-
-		if r.Method == http.MethodPost {
-			email = r.FormValue("email")
-			h := sha256.New()
-			h.Write([]byte(email))
-			encoded := base64.StdEncoding.EncodeToString(h.Sum(nil))
-			sub = "urn:fdc:mock-one-login:2023:" + encoded
-			log.Println(sub)
 		}
 
 		redirectUri := r.FormValue("redirect_uri")
@@ -218,15 +208,22 @@ func authorize() http.HandlerFunc {
 		q.Set("code", code)
 		q.Set("state", r.FormValue("state"))
 
+		email := r.FormValue("email")
+		h := sha256.New()
+		h.Write([]byte(email))
+		encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
 		sessions[code] = sessionData{
+			email:    email,
 			nonce:    r.FormValue("nonce"),
 			user:     r.FormValue("user"),
+			sub:      "urn:fdc:mock-one-login:2023:" + encodedEmail,
 			identity: returnIdentity,
 		}
 
 		u.RawQuery = q.Encode()
 
-		log.Printf("Redirecting to %s with nonce %s", u.String(), sessions[code].nonce)
+		log.Printf("Redirecting to %s with nonce %s and email %s with sub %s", u.String(), sessions[code].nonce, sessions[code].email, sessions[code].sub)
 
 		http.Redirect(w, r, u.String(), 302)
 	}
@@ -235,21 +232,28 @@ func authorize() http.HandlerFunc {
 func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		token := tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		if token.email == "" {
+			return
+		}
+
 		//hard coded values need to pull out
 		userInfo := UserInfoResponse{
-			Sub:           "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ==",
-			Email:         "opg-use-an-lpa+test-user@digital.justice.gov.uk",
+			Sub:           token.sub,
+			Email:         token.email,
 			EmailVerified: true,
 			Phone:         "01406946277",
 			PhoneVerified: true,
 			UpdatedAt:     1311280970,
 		}
 
-		if returnIdentity {
+		if token.identity {
+			givenName, familyName, birthDate := userDetails(token.user)
+
 			claims := JWTCoreIdentity{
 				RegisteredClaims: jwt.RegisteredClaims{
 					Issuer:    "https://identity.account.gov.uk/", // production identity url
-					Subject:   sub,
+					Subject:   token.sub,
 					Audience:  []string{clientId},
 					ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 3)),
 					IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -267,14 +271,14 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 							{
 								"validFrom": "2000-01-01",
 								"nameParts": []map[string]any{
-									{"type": "GivenName", "value": "John"},
-									{"type": "FamilyName", "value": "Doe"},
+									{"type": "GivenName", "value": givenName},
+									{"type": "FamilyName", "value": familyName},
 								},
 							},
 						},
 						"birthDate": []map[string]any{
 							{
-								"value": "1970-01-02",
+								"value": birthDate,
 							},
 						},
 					},
@@ -347,5 +351,18 @@ func logRoute(h http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println(r.Method, r.URL.Path)
 		h.ServeHTTP(w, r)
+	}
+}
+
+func userDetails(key string) (givenName, familyName, birthDate string) {
+	switch key {
+	case "donor":
+		return "Sam", "Smith", "2000-01-02"
+	case "attorney":
+		return "Amy", "Adams", "1980-01-02"
+	case "certificate-provider":
+		return "Charlie", "Cooper", "1990-01-02"
+	default:
+		return "Someone", "Else", "2000-01-02"
 	}
 }
