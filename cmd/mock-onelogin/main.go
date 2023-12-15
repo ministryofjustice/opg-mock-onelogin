@@ -163,7 +163,7 @@ func token(clientId, issuer string) http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(TokenResponse{
-			AccessToken: "access-token-value",
+			AccessToken: accessToken,
 			TokenType:   "Bearer",
 			IDToken:     t,
 		})
@@ -174,7 +174,7 @@ func authorize() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("/authorize")
 
-		returnIdentity := r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT": null}}`
+		returnIdentity := r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`
 
 		if r.Method == http.MethodGet {
 			t := templates.Get("home.page.gohtml")
