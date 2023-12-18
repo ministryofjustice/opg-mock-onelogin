@@ -10,9 +10,11 @@ import (
 	"flag"
 	"fmt"
 	gotemplate "html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -340,6 +342,8 @@ func main() {
 	http.HandleFunc("/userinfo", userInfo(privateKey))
 	http.HandleFunc("/logout", logout())
 
+	http.Handle("/", http.StripPrefix("/web/", StaticHandler(os.DirFS("web/"))))
+
 	log.Println("GOV UK Sign in mock initialized")
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), logRoute(http.DefaultServeMux)); err != nil {
@@ -364,5 +368,29 @@ func userDetails(key string) (givenName, familyName, birthDate string) {
 		return "Charlie", "Cooper", "1990-01-02"
 	default:
 		return "Someone", "Else", "2000-01-02"
+	}
+}
+
+// StaticHandler wraps a http.FileServer with some extra handling that allows us to trap
+// errors of various types (mainly 404 not found) and allow us to return nicer error pages.
+func StaticHandler(dir fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		v := fs.ValidPath(r.URL.Path)
+		if !v {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// check whether a file exists at the given path
+		_, err := fs.Stat(dir, r.URL.Path)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// otherwise, use http.FileServer to serve the static file that we now know
+		// definitely exists
+		http.FileServer(http.FS(dir)).ServeHTTP(w, r)
 	}
 }
