@@ -7,8 +7,8 @@ on:
             description: 'Branch name'
             type: boolean
             default: false
-        semvar_tag:
-            description: 'Semvar tag'
+        semver_tag:
+            description: 'Semver tag'
             required: true
             type: string
 
@@ -66,17 +66,17 @@ jobs:
 
       - name: Generate tags for Docker
         env:
-          SEMVAR_TAG: ${{ inputs.semvar_tag }}
+          SEMVER_TAG: ${{ inputs.semver_tag }}
           ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ matrix.data.ecr_repository }}
         id: docker_tags
         run: |
           if ${{ inputs.build_latest }}; then
-            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           else
-            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           fi
-          echo "semvar_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVAR_TAG" >> $GITHUB_OUTPUT
+          echo "semver_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -96,7 +96,7 @@ jobs:
       - name: Trivy scan
         uses: aquasecurity/trivy-action@0.16.0
         with:
-          image-ref: ${{ steps.docker_tags.outputs.semvar_tag }}
+          image-ref: ${{ steps.docker_tags.outputs.semver_tag }}
           severity: "HIGH,CRITICAL"
           format: 'sarif'
           output: ${{ env.sarif_file }}
