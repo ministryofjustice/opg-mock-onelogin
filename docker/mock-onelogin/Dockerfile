@@ -20,6 +20,7 @@ FROM scratch
 
 COPY --from=build-env /app/mock-onelogin /app/mock-onelogin
 COPY --from=build-env /etc/passwd /etc/passwd
+COPY web web
 
 USER app
 

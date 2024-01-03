@@ -4,17 +4,23 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
+	gotemplate "html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/ministryofjustice/opg-go-common/env"
+	"github.com/ministryofjustice/opg-go-common/template"
 )
 
 var (
@@ -24,12 +30,22 @@ var (
 	clientId           = env.Get("CLIENT_ID", "theClientId")
 	serviceRedirectUrl = env.Get("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 
-	nonce          string
-	returnIdentity = false
-	signingKid     = "my-kid"
-	signingKey, _  = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	sub            = "urn:fdc:mock-one-login:2023:T25lIExvZ2luICsgUEhQIG1ha2VzIGZvciBzYWQgdGltZQ=="
+	signingKid    = "my-kid"
+	signingKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	sessions = map[string]sessionData{}
+	tokens   = map[string]sessionData{}
+
+	templates = template.Templates{}
 )
+
+type sessionData struct {
+	email    string
+	nonce    string
+	sub      string
+	user     string
+	identity bool
+}
 
 type OpenIdConfig struct {
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
@@ -87,7 +103,7 @@ func randomString(length int) string {
 	return stringWithCharset(length, charset)
 }
 
-func createSignedToken(clientId, issuer string) (string, error) {
+func createSignedToken(nonce, sub, clientId, issuer string) (string, error) {
 	t := jwt.New(jwt.SigningMethodES256)
 
 	t.Header["kid"] = signingKid
@@ -136,13 +152,20 @@ func jwks() http.HandlerFunc {
 
 func token(clientId, issuer string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		t, err := createSignedToken(clientId, issuer)
+		code := r.PostFormValue("code")
+		accessToken := randomString(10)
+
+		session := sessions[code]
+		delete(sessions, code)
+		tokens[accessToken] = session
+
+		t, err := createSignedToken(session.nonce, session.sub, clientId, issuer)
 		if err != nil {
 			log.Fatalf("Error creating JWT: %s", err)
 		}
 
 		json.NewEncoder(w).Encode(TokenResponse{
-			AccessToken: "access-token-value",
+			AccessToken: accessToken,
 			TokenType:   "Bearer",
 			IDToken:     t,
 		})
@@ -153,7 +176,19 @@ func authorize() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("/authorize")
 
-		nonce = r.FormValue("nonce")
+		returnIdentity := r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`
+
+		if r.Method == http.MethodGet {
+			t := templates.Get("home.page.gohtml")
+			if err := t(w, struct {
+				ReturnIdentity bool
+			}{
+				ReturnIdentity: returnIdentity,
+			}); err != nil {
+				log.Fatal("Failed to render template")
+			}
+			return
+		}
 
 		redirectUri := r.FormValue("redirect_uri")
 		if redirectUri == "" {
@@ -175,13 +210,22 @@ func authorize() http.HandlerFunc {
 		q.Set("code", code)
 		q.Set("state", r.FormValue("state"))
 
-		if r.FormValue("vtr") == `["Cl.Cm.P2"]` && r.FormValue("claims") == `{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}` {
-			returnIdentity = true
+		email := r.FormValue("email")
+		h := sha256.New()
+		h.Write([]byte(email))
+		encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+		sessions[code] = sessionData{
+			email:    email,
+			nonce:    r.FormValue("nonce"),
+			user:     r.FormValue("user"),
+			sub:      "urn:fdc:mock-one-login:2023:" + encodedEmail,
+			identity: returnIdentity,
 		}
 
 		u.RawQuery = q.Encode()
 
-		log.Printf("Redirecting to %s with nonce %s", u.String(), nonce)
+		log.Printf("Redirecting to %s with nonce %s and email %s with sub %s", u.String(), sessions[code].nonce, sessions[code].email, sessions[code].sub)
 
 		http.Redirect(w, r, u.String(), 302)
 	}
@@ -189,20 +233,29 @@ func authorize() http.HandlerFunc {
 
 func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+
+		token := tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		if token.email == "" {
+			return
+		}
+
+		//hard coded values need to pull out
 		userInfo := UserInfoResponse{
-			Sub:           sub,
-			Email:         "opg-use-an-lpa+test-user@digital.justice.gov.uk",
+			Sub:           token.sub,
+			Email:         token.email,
 			EmailVerified: true,
 			Phone:         "01406946277",
 			PhoneVerified: true,
 			UpdatedAt:     1311280970,
 		}
 
-		if returnIdentity {
+		if token.identity {
+			givenName, familyName, birthDate := userDetails(token.user)
+
 			claims := JWTCoreIdentity{
 				RegisteredClaims: jwt.RegisteredClaims{
 					Issuer:    "https://identity.account.gov.uk/", // production identity url
-					Subject:   sub,
+					Subject:   token.sub,
 					Audience:  []string{clientId},
 					ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 3)),
 					IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -220,14 +273,14 @@ func userInfo(privateKey *ecdsa.PrivateKey) http.HandlerFunc {
 							{
 								"validFrom": "2000-01-01",
 								"nameParts": []map[string]any{
-									{"type": "GivenName", "value": "John"},
-									{"type": "FamilyName", "value": "Doe"},
+									{"type": "GivenName", "value": givenName},
+									{"type": "FamilyName", "value": familyName},
 								},
 							},
 						},
 						"birthDate": []map[string]any{
 							{
-								"value": "1970-01-02",
+								"value": birthDate,
 							},
 						},
 					},
@@ -271,6 +324,12 @@ func main() {
 		JwksURI:               internalURL + "/.well-known/jwks",
 	}
 
+	var err error
+	templates, err = template.Parse("web/templates", gotemplate.FuncMap{})
+	if err != nil {
+		panic(err)
+	}
+
 	privateKeyBytes, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSVBheDJBYW92aXlQWDF3cndmS2FWckxEOHdQbkpJcUlicTMzZm8rWHdBZDdvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSlEyVmtpZWtzNW9rSTIxY1Jma0FhOXVxN0t4TTZtMmpaWUJ4cHJsVVdCWkNFZnhxMjdwVQp0Qzd5aXplVlRiZUVqUnlJaStYalhPQjFBbDhPbHFtaXJnPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
 	privateKey, _ := jwt.ParseECPrivateKeyFromPEM(privateKeyBytes)
 
@@ -283,6 +342,8 @@ func main() {
 	http.HandleFunc("/userinfo", userInfo(privateKey))
 	http.HandleFunc("/logout", logout())
 
+	http.Handle("/", http.StripPrefix("/web/", StaticHandler(os.DirFS("web/"))))
+
 	log.Println("GOV UK Sign in mock initialized")
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), logRoute(http.DefaultServeMux)); err != nil {
@@ -294,5 +355,42 @@ func logRoute(h http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println(r.Method, r.URL.Path)
 		h.ServeHTTP(w, r)
+	}
+}
+
+func userDetails(key string) (givenName, familyName, birthDate string) {
+	switch key {
+	case "donor":
+		return "Sam", "Smith", "2000-01-02"
+	case "attorney":
+		return "Amy", "Adams", "1980-01-02"
+	case "certificate-provider":
+		return "Charlie", "Cooper", "1990-01-02"
+	default:
+		return "Someone", "Else", "2000-01-02"
+	}
+}
+
+// StaticHandler wraps a http.FileServer with some extra handling that allows us to trap
+// errors of various types (mainly 404 not found) and allow us to return nicer error pages.
+func StaticHandler(dir fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		v := fs.ValidPath(r.URL.Path)
+		if !v {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// check whether a file exists at the given path
+		_, err := fs.Stat(dir, r.URL.Path)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// otherwise, use http.FileServer to serve the static file that we now know
+		// definitely exists
+		http.FileServer(http.FS(dir)).ServeHTTP(w, r)
 	}
 }
