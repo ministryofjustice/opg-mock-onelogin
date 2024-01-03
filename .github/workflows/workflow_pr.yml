@@ -55,5 +55,5 @@ jobs:
           echo "Raw: ${{ needs.branch_name.outputs.raw }}"
           echo "Parsed: ${{ needs.branch_name.outputs.parsed }}"
           echo "Alphanumeric: ${{ needs.branch_name.outputs.alphanumeric }}"
-          echo "== semver =="
+          echo "== SEMVER =="
           echo "Tag: ${{ needs.semver_tag.outputs.tag }}"
