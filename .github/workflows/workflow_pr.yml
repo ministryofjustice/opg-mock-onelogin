@@ -27,27 +27,27 @@ jobs:
     name: "Generate a safe branch name"
     uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-branch-name.yml@main
 
-  semvar_tag:
+  semver_tag:
     needs: [branch_name]
-    name: "Generate the semvar tag value"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semvar-tag.yml@main
+    name: "Generate the semver tag value"
+    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semver-tag.yml@main
     with:
       branch_name: "${{ needs.branch_name.outputs.parsed }}"
     secrets: inherit
 
   build_scan_push:
-    needs: [branch_name, semvar_tag]
+    needs: [branch_name, semver_tag]
     name: "Build, scan and push the image"
     uses: ./.github/workflows/_docker_build_scan_push.yml
     with:
       build_latest: false
-      semvar_tag: "${{ needs.semvar_tag.outputs.tag }}"
+      semver_tag: "${{ needs.semver_tag.outputs.tag }}"
     secrets: inherit
 
   end:
     name: 'End of workflow'
     runs-on: 'ubuntu-latest'
-    needs: [branch_name, semvar_tag, build_scan_push]
+    needs: [branch_name, semver_tag, build_scan_push]
     steps:
       - name: "Output data"
         run: |
@@ -55,5 +55,5 @@ jobs:
           echo "Raw: ${{ needs.branch_name.outputs.raw }}"
           echo "Parsed: ${{ needs.branch_name.outputs.parsed }}"
           echo "Alphanumeric: ${{ needs.branch_name.outputs.alphanumeric }}"
-          echo "== SEMVAR =="
-          echo "Tag: ${{ needs.semvar_tag.outputs.tag }}"
+          echo "== SEMVER =="
+          echo "Tag: ${{ needs.semver_tag.outputs.tag }}"
