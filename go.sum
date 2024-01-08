@@ -2,6 +2,7 @@ github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/golang-jwt/jwt/v4 v4.5.0 h1:7cYmW1XlMY7h7ii7UhUyChSgS5wUJEnm9uZVTGqOWzg=
 github.com/golang-jwt/jwt/v4 v4.5.0/go.mod h1:m21LjoU+eqJr34lmDMbreY2eSTRJ1cv77w39/MY0Ch0=
+github.com/golang-jwt/jwt/v5 v5.2.0/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
 github.com/ministryofjustice/opg-go-common v0.0.0-20231002150139-ed6f6387fc7e h1:JLWcj/iVBRSHJNDvCP8WwCEX+1EpsmSymQIxI6/BdFc=
 github.com/ministryofjustice/opg-go-common v0.0.0-20231002150139-ed6f6387fc7e/go.mod h1:1RmCNi6dkAv8umAgNHp8RkuBoSKLlxp1UtfsGYH7ufc=
 github.com/ministryofjustice/opg-go-common v0.0.0-20231009133357-1f236d604316 h1:iuo6s75firLntoOAU+SCaRnXUHlLfTIxru8hBlYsECw=
