@@ -37,9 +37,9 @@ jobs:
       fail-fast: true
       matrix:
         data:
-          - docker_build_directory: "./docker/mock-onelogin"
-            image_app_name: "mock-onelogin"
-            ecr_repository: "use_an_lpa/mock_onelogin_app"
+          - docker_build_directory: .
+            image_app_name: mock-onelogin
+            ecr_repository: mock-onelogin
     env:
       sarif_file: trivy-results.sarif
 
