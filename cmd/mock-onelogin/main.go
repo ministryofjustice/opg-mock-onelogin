@@ -243,10 +243,14 @@ func authorize(tmpl interface {
 
 		sub := r.FormValue("sub")
 		if sub == "" {
-			h := sha256.New()
-			h.Write([]byte(email))
-			encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
-			sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
+			if templateSub {
+				sub = randomString("sub-", 20)
+			} else {
+				h := sha256.New()
+				h.Write([]byte(email))
+				encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+				sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
+			}
 		}
 
 		sessions[code] = sessionData{
