@@ -99,9 +99,8 @@ type mockTemplate struct {
 	data any
 }
 
-func (m *mockTemplate) ExecuteTemplate(w io.Writer, name string, data any) error {
+func (m *mockTemplate) Execute(w io.Writer, data any) error {
 	m.w = w
-	m.name = name
 	m.data = data
 	return nil
 }
@@ -117,7 +116,6 @@ func TestAuthorize(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, "use-an-lpa.gohtml", template.name)
 	assert.Equal(t, authorizeTemplateData{}, template.data)
 }
 
@@ -137,7 +135,6 @@ func TestAuthorizeWithIdentity(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, "use-an-lpa.gohtml", template.name)
 	assert.Equal(t, authorizeTemplateData{Identity: true}, template.data)
 }
 
