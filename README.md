@@ -1,2 +1,7 @@
-# opg-template-repository
-Github "template" repository, from which to create new OPG Repositories: Managed by opg-org-infra &amp; Terraform
+# opg-mock-onelogin
+
+A mock service for [GOV.UK One Login](https://www.sign-in.service.gov.uk/).
+
+## Contact
+
+Should you wish to talk to others about using this service, you can find help in the `#ss-opg-mock-onelogin` slack channel.
