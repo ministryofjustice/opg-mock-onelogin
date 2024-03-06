@@ -37,7 +37,7 @@ jobs:
       fail-fast: true
       matrix:
         data:
-          - docker_build_directory: .
+          - docker_build_directory: ./docker/mock-onelogin
             image_app_name: mock-onelogin
             ecr_repository: mock-onelogin
     env:
