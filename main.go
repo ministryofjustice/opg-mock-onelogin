@@ -28,7 +28,9 @@ var (
 	port               = envGet("PORT", "8080")
 	publicURL          = envGet("PUBLIC_URL", "http://localhost:8080")
 	serviceRedirectUrl = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
-	templateName       = envGet("TEMPLATE", "use-an-lpa.gohtml")
+	templateHeader     = os.Getenv("TEMPLATE_HEADER") == "1"
+	templateSub        = os.Getenv("TEMPLATE_SUB") == "1"
+	templateEmail      = os.Getenv("TEMPLATE_EMAIL")
 
 	tokenSigningKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tokenSigningKid    = randomString("kid-", 8)
@@ -180,10 +182,13 @@ func token(kid, clientId, issuer string) Handler {
 
 type authorizeTemplateData struct {
 	Identity bool
+	Header   bool
+	Sub      bool
+	Email    string
 }
 
 func authorize(tmpl interface {
-	ExecuteTemplate(io.Writer, string, any) error
+	Execute(io.Writer, any) error
 }) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		returnIdentity := false
@@ -203,8 +208,11 @@ func authorize(tmpl interface {
 		}
 
 		if r.Method == http.MethodGet {
-			return tmpl.ExecuteTemplate(w, templateName, authorizeTemplateData{
+			return tmpl.Execute(w, authorizeTemplateData{
 				Identity: returnIdentity,
+				Header:   templateHeader,
+				Sub:      templateSub,
+				Email:    templateEmail,
 			})
 		}
 
@@ -357,7 +365,7 @@ func run(logger *slog.Logger) error {
 		JwksURI:               internalURL + "/.well-known/jwks",
 	}
 
-	templates, err := template.ParseGlob("web/templates/*.*")
+	templates, err := template.ParseFiles("web/templates/authorize.gohtml")
 	if err != nil {
 		return err
 	}
