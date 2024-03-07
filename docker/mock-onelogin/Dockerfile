@@ -1,16 +1,14 @@
-FROM --platform=$BUILDPLATFORM golang:1.21 as build-env
+FROM golang:1.22.0-alpine as build-env
 
-ARG TARGETARCH
-
-RUN apt-get install -y --no-install-recommends openssl
+RUN apk --no-cache add openssl
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+COPY --link go.mod go.sum ./
 RUN go mod download
 
-COPY cmd/mock-onelogin ./cmd/mock-onelogin
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -a -installsuffix cgo -o mock-onelogin ./cmd/mock-onelogin
+COPY --link cmd/mock-onelogin/main.go ./main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o mock-onelogin .
 
 RUN addgroup --system app && \
   adduser --system --gecos app app && \
@@ -19,9 +17,6 @@ RUN addgroup --system app && \
 FROM scratch
 
 COPY --from=build-env /app/mock-onelogin /app/mock-onelogin
-COPY --from=build-env /etc/passwd /etc/passwd
 COPY web web
-
-USER app
 
 CMD [ "/app/mock-onelogin" ]
