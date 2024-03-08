@@ -7,12 +7,8 @@ WORKDIR /app
 COPY --link go.mod go.sum ./
 RUN go mod download
 
-COPY --link cmd/mock-onelogin/main.go ./main.go
+COPY --link main.go ./main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o mock-onelogin .
-
-RUN addgroup --system app && \
-  adduser --system --gecos app app && \
-  chown -R app:app /app
 
 FROM scratch
 
