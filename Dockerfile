@@ -7,7 +7,7 @@ WORKDIR /app
 COPY --link go.mod go.sum ./
 RUN go mod download
 
-COPY --link cmd/mock-onelogin/main.go ./main.go
+COPY --link main.go ./main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o mock-onelogin .
 
 RUN addgroup --system app && \
@@ -17,6 +17,9 @@ RUN addgroup --system app && \
 FROM scratch
 
 COPY --from=build-env /app/mock-onelogin /app/mock-onelogin
+COPY --from=build-env /etc/passwd /etc/passwd
 COPY web web
+
+USER app
 
 CMD [ "/app/mock-onelogin" ]
