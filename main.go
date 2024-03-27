@@ -49,6 +49,10 @@ var (
 
 type Handler func(w http.ResponseWriter, r *http.Request) error
 
+type user struct {
+	firstNames, lastName, dateOfBirth string
+}
+
 type sessionData struct {
 	// email to use for the session
 	email string
@@ -57,7 +61,7 @@ type sessionData struct {
 	// sub to use for the session
 	sub string
 	// user selected from identity options
-	user string
+	user user
 	// identity is true when using the identity flow
 	identity bool
 }
@@ -256,7 +260,7 @@ func authorize(tmpl interface {
 		sessions[code] = sessionData{
 			email:    email,
 			nonce:    r.FormValue("nonce"),
-			user:     r.FormValue("user"),
+			user:     userDetails(r.PostForm),
 			sub:      sub,
 			identity: returnIdentity,
 		}
@@ -286,8 +290,6 @@ func userInfo() Handler {
 		}
 
 		if token.identity {
-			givenName, familyName, birthDate := userDetails(token.user)
-
 			claims := JWTCoreIdentity{
 				RegisteredClaims: jwt.RegisteredClaims{
 					Issuer:    "https://identity.account.gov.uk/", // production identity url
@@ -309,14 +311,14 @@ func userInfo() Handler {
 							{
 								"validFrom": "2000-01-01",
 								"nameParts": []map[string]any{
-									{"type": "GivenName", "value": givenName},
-									{"type": "FamilyName", "value": familyName},
+									{"type": "GivenName", "value": token.user.firstNames},
+									{"type": "FamilyName", "value": token.user.lastName},
 								},
 							},
 						},
 						"birthDate": []map[string]any{
 							{
-								"value": birthDate,
+								"value": token.user.dateOfBirth,
 							},
 						},
 					},
@@ -402,17 +404,25 @@ func run(logger *slog.Logger) error {
 	return http.ListenAndServe(":"+port, mux)
 }
 
-func userDetails(key string) (givenName, familyName, birthDate string) {
-	switch key {
+func userDetails(form url.Values) user {
+	switch form.Get("user") {
 	case "donor":
-		return "Sam", "Smith", "2000-01-02"
-	case "attorney":
-		return "Amy", "Adams", "1980-01-02"
+		return user{"Sam", "Smith", "2000-01-02"}
 	case "certificate-provider":
-		return "Charlie", "Cooper", "1990-01-02"
+		return user{"Charlie", "Cooper", "1990-01-02"}
+	case "custom":
+		return user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
 	default:
-		return "Someone", "Else", "2000-01-02"
+		return user{}
 	}
+}
+
+func zeroPad(s string) string {
+	if len(s) == 1 {
+		return "0" + s
+	}
+
+	return s
 }
 
 // Get the key from environment, if not set or empty returns def.
