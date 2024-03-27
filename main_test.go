@@ -72,7 +72,7 @@ func TestToken(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	session := sessionData{user: "x"}
+	session := sessionData{user: user{"x", "y", "z"}}
 	sessions["my-code"] = session
 
 	h := token("my-kid", "my-client", "http://issuer")
@@ -202,12 +202,44 @@ func TestAuthorizePost(t *testing.T) {
 				"nonce":        {"my-nonce"},
 				"vtr":          {`["Cl.Cm.P2"]`},
 				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"user":         {"donor"},
 			},
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
 				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
+				user: user{
+					firstNames:  "Sam",
+					lastName:    "Smith",
+					dateOfBirth: "2000-01-02",
+				},
+			},
+		},
+		"custom identity": {
+			form: url.Values{
+				"redirect_uri": {"http://localhost:5050/auth/redirect"},
+				"state":        {"my-state"},
+				"nonce":        {"my-nonce"},
+				"vtr":          {`["Cl.Cm.P2"]`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"user":         {"custom"},
+				"first-names":  {"John"},
+				"last-name":    {"Smith"},
+				"day":          {"1"},
+				"month":        {"2"},
+				"year":         {"3"},
+			},
+			session: sessionData{
+				email:    "simulate-delivered@notifications.service.gov.uk",
+				nonce:    "my-nonce",
+				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
+				identity: true,
+				user: user{
+					firstNames:  "John",
+					lastName:    "Smith",
+					dateOfBirth: "3-02-01",
+				},
 			},
 		},
 	}
@@ -256,7 +288,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 	r.Header.Add("Authorization", "Bearer my-token")
 
 	tokens["my-token"] = sessionData{
-		user:     "donor",
+		user:     user{"Sam", "Smith", "2000-01-02"},
 		sub:      "my-sub",
 		email:    "my-email",
 		identity: true,
