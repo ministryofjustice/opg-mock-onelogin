@@ -72,6 +72,7 @@ type OpenIdConfig struct {
 	TokenEndpoint         string `json:"token_endpoint"`
 	UserinfoEndpoint      string `json:"userinfo_endpoint"`
 	JwksURI               string `json:"jwks_uri"`
+	EndSessionEndpoint    string `json:"end_session_endpoint"`
 }
 
 type TokenResponse struct {
@@ -335,10 +336,16 @@ func userInfo() Handler {
 
 func logout() Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
+		idToken := r.FormValue("token")
 		postLogoutRedirectUri := r.FormValue("post_logout_redirect_uri")
 
+		if idToken == "" && postLogoutRedirectUri != "" {
+			return fmt.Errorf("query param 'post_logout_redirect_uri' specified when token param was not")
+		}
+
+		// default behaviour according to docs.
 		if postLogoutRedirectUri == "" {
-			return fmt.Errorf("required query param 'post_logout_redirect_uri' missing from request")
+			http.Redirect(w, r, "https://signin.account.gov.uk/signed-out", http.StatusFound)
 		}
 
 		u, parseErr := url.Parse(postLogoutRedirectUri)
@@ -369,6 +376,7 @@ func run(logger *slog.Logger) error {
 		TokenEndpoint:         internalURL + "/token",
 		UserinfoEndpoint:      internalURL + "/userinfo",
 		JwksURI:               internalURL + "/.well-known/jwks",
+		EndSessionEndpoint:    internalURL + "/logout",
 	}
 
 	templates, err := template.ParseFiles("web/templates/authorize.gohtml")
