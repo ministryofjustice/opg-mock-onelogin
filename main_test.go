@@ -39,6 +39,7 @@ func TestOpenIDConfig(t *testing.T) {
 		TokenEndpoint:         "c",
 		UserinfoEndpoint:      "d",
 		JwksURI:               "e",
+		EndSessionEndpoint:    "f",
 	})
 	err := h(w, r)
 	resp := w.Result()
@@ -46,7 +47,7 @@ func TestOpenIDConfig(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-	assert.JSONEq(t, `{"authorization_endpoint":"a","issuer":"b","token_endpoint":"c","userinfo_endpoint":"d","jwks_uri":"e"}`, string(body))
+	assert.JSONEq(t, `{"authorization_endpoint":"a","issuer":"b","token_endpoint":"c","userinfo_endpoint":"d","jwks_uri":"e","end_session_endpoint":"f"}`, string(body))
 }
 
 func TestJwks(t *testing.T) {
@@ -315,6 +316,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 
 func TestLogout(t *testing.T) {
 	form := url.Values{
+		"token":                    {"testtoken"},
 		"post_logout_redirect_uri": {"http://somewhere"},
 	}
 
