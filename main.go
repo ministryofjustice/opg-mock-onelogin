@@ -336,7 +336,7 @@ func userInfo() Handler {
 
 func logout() Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
-		idToken := r.FormValue("token")
+		idToken := r.FormValue("id_token_hint")
 		postLogoutRedirectUri := r.FormValue("post_logout_redirect_uri")
 
 		if idToken == "" && postLogoutRedirectUri != "" {

@@ -316,7 +316,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 
 func TestLogout(t *testing.T) {
 	form := url.Values{
-		"token":                    {"testtoken"},
+		"id_token_hint":            {"testtoken"},
 		"post_logout_redirect_uri": {"http://somewhere"},
 	}
 
