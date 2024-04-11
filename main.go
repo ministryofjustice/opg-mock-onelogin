@@ -376,7 +376,7 @@ func run(logger *slog.Logger) error {
 		TokenEndpoint:         internalURL + "/token",
 		UserinfoEndpoint:      internalURL + "/userinfo",
 		JwksURI:               internalURL + "/.well-known/jwks",
-		EndSessionEndpoint:    internalURL + "/logout",
+		EndSessionEndpoint:    publicURL + "/logout",
 	}
 
 	templates, err := template.ParseFiles("web/templates/authorize.gohtml")
