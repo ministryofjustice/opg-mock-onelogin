@@ -243,7 +243,7 @@ func TestAuthorizePost(t *testing.T) {
 				},
 			},
 		},
-		"cannot prove identity": {
+		"unsuccessful identity check with return code": {
 			form: url.Values{
 				"redirect_uri": {"http://localhost:5050/auth/redirect"},
 				"state":        {"my-state"},
@@ -331,7 +331,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 	assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.")
 }
 
-func TestUserInfoWithIdentityUnableToProveIdentity(t *testing.T) {
+func TestUserInfoWithIdentityUnsuccessfulIdentityCheckWithReturnCode(t *testing.T) {
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Add("Authorization", "Bearer my-token")

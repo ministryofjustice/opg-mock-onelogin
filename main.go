@@ -23,14 +23,15 @@ import (
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 var (
-	clientId           = envGet("CLIENT_ID", "theClientId")
-	internalURL        = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
-	port               = envGet("PORT", "8080")
-	publicURL          = envGet("PUBLIC_URL", "http://localhost:8080")
-	serviceRedirectUrl = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
-	templateHeader     = os.Getenv("TEMPLATE_HEADER") == "1"
-	templateSub        = os.Getenv("TEMPLATE_SUB") == "1"
-	templateEmail      = os.Getenv("TEMPLATE_EMAIL")
+	clientId            = envGet("CLIENT_ID", "theClientId")
+	internalURL         = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
+	port                = envGet("PORT", "8080")
+	publicURL           = envGet("PUBLIC_URL", "http://localhost:8080")
+	serviceRedirectUrl  = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
+	templateHeader      = os.Getenv("TEMPLATE_HEADER") == "1"
+	templateSub         = os.Getenv("TEMPLATE_SUB") == "1"
+	templateEmail       = os.Getenv("TEMPLATE_EMAIL")
+	templateReturnCodes = os.Getenv("TEMPLATE_RETURN_CODES") == "1"
 
 	tokenSigningKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tokenSigningKid    = randomString("kid-", 8)
@@ -193,10 +194,11 @@ func token(kid, clientId, issuer string) Handler {
 }
 
 type authorizeTemplateData struct {
-	Identity bool
-	Header   bool
-	Sub      bool
-	Email    string
+	Identity    bool
+	Header      bool
+	Sub         bool
+	Email       string
+	ReturnCodes bool
 }
 
 func authorize(tmpl interface {
@@ -221,10 +223,11 @@ func authorize(tmpl interface {
 
 		if r.Method == http.MethodGet {
 			return tmpl.Execute(w, authorizeTemplateData{
-				Identity: returnIdentity,
-				Header:   templateHeader,
-				Sub:      templateSub,
-				Email:    templateEmail,
+				Identity:    returnIdentity,
+				Header:      templateHeader,
+				Sub:         templateSub,
+				Email:       templateEmail,
+				ReturnCodes: templateReturnCodes,
 			})
 		}
 
