@@ -23,14 +23,15 @@ import (
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 var (
-	clientId           = envGet("CLIENT_ID", "theClientId")
-	internalURL        = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
-	port               = envGet("PORT", "8080")
-	publicURL          = envGet("PUBLIC_URL", "http://localhost:8080")
-	serviceRedirectUrl = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
-	templateHeader     = os.Getenv("TEMPLATE_HEADER") == "1"
-	templateSub        = os.Getenv("TEMPLATE_SUB") == "1"
-	templateEmail      = os.Getenv("TEMPLATE_EMAIL")
+	clientId            = envGet("CLIENT_ID", "theClientId")
+	internalURL         = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
+	port                = envGet("PORT", "8080")
+	publicURL           = envGet("PUBLIC_URL", "http://localhost:8080")
+	serviceRedirectUrl  = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
+	templateHeader      = os.Getenv("TEMPLATE_HEADER") == "1"
+	templateSub         = os.Getenv("TEMPLATE_SUB") == "1"
+	templateEmail       = os.Getenv("TEMPLATE_EMAIL")
+	templateReturnCodes = os.Getenv("TEMPLATE_RETURN_CODES") == "1"
 
 	tokenSigningKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tokenSigningKid    = randomString("kid-", 8)
@@ -64,6 +65,8 @@ type sessionData struct {
 	user user
 	// identity is true when using the identity flow
 	identity bool
+	// returnCode to respond with (for failure to ID)
+	returnCode string
 }
 
 type OpenIdConfig struct {
@@ -88,13 +91,18 @@ type JWTIdToken struct {
 }
 
 type UserInfoResponse struct {
-	Sub             string `json:"sub"`
-	Email           string `json:"email"`
-	EmailVerified   bool   `json:"email_verified"`
-	Phone           string `json:"phone"`
-	PhoneVerified   bool   `json:"phone_verified"`
-	UpdatedAt       int    `json:"updated_at"`
-	CoreIdentityJWT string `json:"https://vocab.account.gov.uk/v1/coreIdentityJWT,omitempty"`
+	Sub             string           `json:"sub"`
+	Email           string           `json:"email"`
+	EmailVerified   bool             `json:"email_verified"`
+	Phone           string           `json:"phone"`
+	PhoneVerified   bool             `json:"phone_verified"`
+	UpdatedAt       int              `json:"updated_at"`
+	CoreIdentityJWT string           `json:"https://vocab.account.gov.uk/v1/coreIdentityJWT,omitempty"`
+	ReturnCode      []ReturnCodeInfo `json:"https://vocab.account.gov.uk/v1/returnCode,omitempty"`
+}
+
+type ReturnCodeInfo struct {
+	Code string `json:"code"`
 }
 
 type JWTCoreIdentity struct {
@@ -186,10 +194,11 @@ func token(kid, clientId, issuer string) Handler {
 }
 
 type authorizeTemplateData struct {
-	Identity bool
-	Header   bool
-	Sub      bool
-	Email    string
+	Identity    bool
+	Header      bool
+	Sub         bool
+	Email       string
+	ReturnCodes bool
 }
 
 func authorize(tmpl interface {
@@ -214,10 +223,11 @@ func authorize(tmpl interface {
 
 		if r.Method == http.MethodGet {
 			return tmpl.Execute(w, authorizeTemplateData{
-				Identity: returnIdentity,
-				Header:   templateHeader,
-				Sub:      templateSub,
-				Email:    templateEmail,
+				Identity:    returnIdentity,
+				Header:      templateHeader,
+				Sub:         templateSub,
+				Email:       templateEmail,
+				ReturnCodes: templateReturnCodes,
 			})
 		}
 
@@ -259,11 +269,12 @@ func authorize(tmpl interface {
 		}
 
 		sessions[code] = sessionData{
-			email:    email,
-			nonce:    r.FormValue("nonce"),
-			user:     userDetails(r.PostForm),
-			sub:      sub,
-			identity: returnIdentity,
+			email:      email,
+			nonce:      r.FormValue("nonce"),
+			user:       userDetails(r.PostForm),
+			sub:        sub,
+			identity:   returnIdentity,
+			returnCode: r.FormValue("return-code"),
 		}
 
 		u.RawQuery = q.Encode()
@@ -291,42 +302,46 @@ func userInfo() Handler {
 		}
 
 		if token.identity {
-			claims := JWTCoreIdentity{
-				RegisteredClaims: jwt.RegisteredClaims{
-					Issuer:    "https://identity.account.gov.uk/", // production identity url
-					Subject:   token.sub,
-					Audience:  []string{clientId},
-					ExpiresAt: jwt.NewNumericDate(now().Add(time.Minute * 3)),
-					IssuedAt:  jwt.NewNumericDate(now()),
-					NotBefore: jwt.NewNumericDate(now()),
-				},
-				VectorOfTrust:   "P2",
-				VectorTrustMark: "https://oidc.account.gov.uk/trustmark", // production trustmark url
-				VerifiableCredential: map[string]any{
-					"type": []string{
-						"VerifiableCredential",
-						"VerifiableIdentityCredential",
+			if token.returnCode == "X" {
+				userInfo.ReturnCode = append(userInfo.ReturnCode, ReturnCodeInfo{Code: token.returnCode})
+			} else {
+				claims := JWTCoreIdentity{
+					RegisteredClaims: jwt.RegisteredClaims{
+						Issuer:    "https://identity.account.gov.uk/", // production identity url
+						Subject:   token.sub,
+						Audience:  []string{clientId},
+						ExpiresAt: jwt.NewNumericDate(now().Add(time.Minute * 3)),
+						IssuedAt:  jwt.NewNumericDate(now()),
+						NotBefore: jwt.NewNumericDate(now()),
 					},
-					"credentialSubject": map[string]any{
-						"name": []map[string]any{
-							{
-								"validFrom": "2000-01-01",
-								"nameParts": []map[string]any{
-									{"type": "GivenName", "value": token.user.firstNames},
-									{"type": "FamilyName", "value": token.user.lastName},
+					VectorOfTrust:   "P2",
+					VectorTrustMark: "https://oidc.account.gov.uk/trustmark", // production trustmark url
+					VerifiableCredential: map[string]any{
+						"type": []string{
+							"VerifiableCredential",
+							"VerifiableIdentityCredential",
+						},
+						"credentialSubject": map[string]any{
+							"name": []map[string]any{
+								{
+									"validFrom": "2000-01-01",
+									"nameParts": []map[string]any{
+										{"type": "GivenName", "value": token.user.firstNames},
+										{"type": "FamilyName", "value": token.user.lastName},
+									},
+								},
+							},
+							"birthDate": []map[string]any{
+								{
+									"value": token.user.dateOfBirth,
 								},
 							},
 						},
-						"birthDate": []map[string]any{
-							{
-								"value": token.user.dateOfBirth,
-							},
-						},
 					},
-				},
-			}
+				}
 
-			userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
+				userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
