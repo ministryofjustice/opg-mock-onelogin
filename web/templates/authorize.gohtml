@@ -73,6 +73,21 @@
                 </fieldset>
               </div>
             </div>
+            {{ if .ReturnCodes }}
+              <div class="govuk-radios__divider">or</div>
+              <div class="govuk-radios__item">
+                <input class="govuk-radios__input" id="unsuccessful-id-check-1" name="return-code" type="radio" value="X">
+                <label class="govuk-label govuk-radios__label" for="unsuccessful-id-check-1">
+                  Unable to prove identity (X)
+                </label>
+              </div>
+              <div class="govuk-radios__item">
+                <input class="govuk-radios__input" id="unsuccessful-id-check-2" name="return-code" type="radio" value="T">
+                <label class="govuk-label govuk-radios__label" for="unsuccessful-id-check-2">
+                  Failed identity check (T)
+                </label>
+              </div>
+            {{ end }}
 
           </div>
         </fieldset>
