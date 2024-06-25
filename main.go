@@ -206,6 +206,7 @@ func authorize(tmpl interface {
 }) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		returnIdentity := false
+		useReturnCodes := false
 
 		if r.FormValue("claims") != "" {
 			var claims struct {
@@ -219,6 +220,10 @@ func authorize(tmpl interface {
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/coreIdentityJWT"]; ok {
 				returnIdentity = r.FormValue("vtr") == `["Cl.Cm.P2"]`
 			}
+
+			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/returnCode"]; ok {
+				useReturnCodes = true
+			}
 		}
 
 		if r.Method == http.MethodGet {
@@ -227,7 +232,7 @@ func authorize(tmpl interface {
 				Header:      templateHeader,
 				Sub:         templateSub,
 				Email:       templateEmail,
-				ReturnCodes: templateReturnCodes,
+				ReturnCodes: templateReturnCodes && useReturnCodes,
 			})
 		}
 
@@ -268,13 +273,18 @@ func authorize(tmpl interface {
 			}
 		}
 
+		returnCode := ""
+		if useReturnCodes {
+			returnCode = r.FormValue("return-code")
+		}
+
 		sessions[code] = sessionData{
 			email:      email,
 			nonce:      r.FormValue("nonce"),
 			user:       userDetails(r.PostForm),
 			sub:        sub,
 			identity:   returnIdentity,
-			returnCode: r.FormValue("return-code"),
+			returnCode: returnCode,
 		}
 
 		u.RawQuery = q.Encode()
@@ -302,7 +312,7 @@ func userInfo() Handler {
 		}
 
 		if token.identity {
-			if token.returnCode == "X" {
+			if token.returnCode != "" {
 				userInfo.ReturnCode = append(userInfo.ReturnCode, ReturnCodeInfo{Code: token.returnCode})
 			} else {
 				claims := JWTCoreIdentity{
