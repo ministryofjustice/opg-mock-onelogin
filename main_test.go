@@ -139,6 +139,26 @@ func TestAuthorizeWithIdentity(t *testing.T) {
 	assert.Equal(t, authorizeTemplateData{Identity: true}, template.data)
 }
 
+func TestAuthorizeWithReturnCode(t *testing.T) {
+	form := url.Values{
+		"claims": {`{"userinfo":{"https://vocab.account.gov.uk/v1/returnCode":null}}`},
+	}
+
+	templateReturnCodes = true
+
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/?"+form.Encode(), nil)
+
+	template := &mockTemplate{}
+
+	h := authorize(template)
+	err := h(w, r)
+
+	assert.Nil(t, err)
+	assert.Equal(t, w, template.w)
+	assert.Equal(t, authorizeTemplateData{ReturnCodes: true}, template.data)
+}
+
 func TestAuthorizePost(t *testing.T) {
 	testcases := map[string]struct {
 		form    url.Values
@@ -249,7 +269,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"vtr":          {`["Cl.Cm.P2"]`},
-				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/returnCode":null}}`},
 				"return-code":  {"X"},
 			},
 			session: sessionData{
