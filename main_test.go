@@ -222,7 +222,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"vtr":          {`["Cl.Cm.P2"]`},
-				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/address":null}}`},
 				"user":         {"donor"},
 			},
 			session: sessionData{
@@ -252,7 +252,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"vtr":          {`["Cl.Cm.P2"]`},
-				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/address":null}}`},
 				"user":         {"certificate-provider"},
 			},
 			session: sessionData{
@@ -282,7 +282,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":           {"my-state"},
 				"nonce":           {"my-nonce"},
 				"vtr":             {`["Cl.Cm.P2"]`},
-				"claims":          {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null}}`},
+				"claims":          {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/address":null}}`},
 				"user":            {"custom"},
 				"first-names":     {"John"},
 				"last-name":       {"Smith"},

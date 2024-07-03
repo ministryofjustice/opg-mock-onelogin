@@ -226,6 +226,7 @@ func authorize(tmpl interface {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		returnIdentity := false
 		useReturnCodes := false
+		returnAddress := false
 
 		if r.FormValue("claims") != "" {
 			var claims struct {
@@ -242,6 +243,10 @@ func authorize(tmpl interface {
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/returnCode"]; ok {
 				useReturnCodes = true
+			}
+
+			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/address"]; ok {
+				returnAddress = true
 			}
 		}
 
@@ -297,7 +302,12 @@ func authorize(tmpl interface {
 			returnCode = r.FormValue("return-code")
 		}
 
-		user, address := userDetails(r.PostForm)
+		user, a := userDetails(r.PostForm)
+
+		address := CredentialAddress{}
+		if returnAddress {
+			address = a
+		}
 
 		sessions[code] = sessionData{
 			email:      email,
