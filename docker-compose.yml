@@ -1,0 +1,11 @@
+services:
+  mock-onelogin:
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - "6060:8080"
+    environment:
+      TEMPLATE_HEADER: "1"
+      TEMPLATE_SUB: "1"
+      PUBLIC_URL: "http://localhost:6060"
+      TEMPLATE_RETURN_CODES: "1"
