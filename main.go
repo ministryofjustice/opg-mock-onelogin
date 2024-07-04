@@ -67,6 +67,8 @@ type sessionData struct {
 	identity bool
 	// returnCode to respond with (for failure to ID)
 	returnCode string
+	// address associated with the user
+	address CredentialAddress
 }
 
 type OpenIdConfig struct {
@@ -91,14 +93,31 @@ type JWTIdToken struct {
 }
 
 type UserInfoResponse struct {
-	Sub             string           `json:"sub"`
-	Email           string           `json:"email"`
-	EmailVerified   bool             `json:"email_verified"`
-	Phone           string           `json:"phone"`
-	PhoneVerified   bool             `json:"phone_verified"`
-	UpdatedAt       int              `json:"updated_at"`
-	CoreIdentityJWT string           `json:"https://vocab.account.gov.uk/v1/coreIdentityJWT,omitempty"`
-	ReturnCode      []ReturnCodeInfo `json:"https://vocab.account.gov.uk/v1/returnCode,omitempty"`
+	Sub             string              `json:"sub"`
+	Email           string              `json:"email"`
+	EmailVerified   bool                `json:"email_verified"`
+	Phone           string              `json:"phone"`
+	PhoneVerified   bool                `json:"phone_verified"`
+	UpdatedAt       int                 `json:"updated_at"`
+	CoreIdentityJWT string              `json:"https://vocab.account.gov.uk/v1/coreIdentityJWT,omitempty"`
+	ReturnCode      []ReturnCodeInfo    `json:"https://vocab.account.gov.uk/v1/returnCode,omitempty"`
+	Addresses       []CredentialAddress `json:"https://vocab.account.gov.uk/v1/address,omitempty"`
+}
+
+type CredentialAddress struct {
+	UPRN                           string `json:"uprn,omitempty"`
+	SubBuildingName                string `json:"subBuildingName,omitempty"`
+	BuildingName                   string `json:"buildingName,omitempty"`
+	BuildingNumber                 string `json:"buildingNumber,omitempty"`
+	DependentStreetName            string `json:"dependentStreetName,omitempty"`
+	StreetName                     string `json:"streetName,omitempty"`
+	DoubleDependentAddressLocality string `json:"doubleDependentAddressLocality,omitempty"`
+	DependentAddressLocality       string `json:"dependentAddressLocality,omitempty"`
+	AddressLocality                string `json:"addressLocality,omitempty"`
+	PostalCode                     string `json:"postalCode,omitempty"`
+	AddressCountry                 string `json:"addressCountry,omitempty"`
+	ValidFrom                      string `json:"validFrom,omitempty"`
+	ValidUntil                     string `json:"validUntil,omitempty"`
 }
 
 type ReturnCodeInfo struct {
@@ -207,6 +226,7 @@ func authorize(tmpl interface {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		returnIdentity := false
 		useReturnCodes := false
+		returnAddress := false
 
 		if r.FormValue("claims") != "" {
 			var claims struct {
@@ -223,6 +243,10 @@ func authorize(tmpl interface {
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/returnCode"]; ok {
 				useReturnCodes = true
+			}
+
+			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/address"]; ok {
+				returnAddress = true
 			}
 		}
 
@@ -278,13 +302,21 @@ func authorize(tmpl interface {
 			returnCode = r.FormValue("return-code")
 		}
 
+		user, a := userDetails(r.PostForm)
+
+		address := CredentialAddress{}
+		if returnAddress {
+			address = a
+		}
+
 		sessions[code] = sessionData{
 			email:      email,
 			nonce:      r.FormValue("nonce"),
-			user:       userDetails(r.PostForm),
+			user:       user,
 			sub:        sub,
 			identity:   returnIdentity,
 			returnCode: returnCode,
+			address:    address,
 		}
 
 		u.RawQuery = q.Encode()
@@ -350,6 +382,7 @@ func userInfo() Handler {
 					},
 				}
 
+				userInfo.Addresses = append(userInfo.Addresses, token.address)
 				userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
 			}
 		}
@@ -437,16 +470,39 @@ func run(logger *slog.Logger) error {
 	return http.ListenAndServe(":"+port, mux)
 }
 
-func userDetails(form url.Values) user {
+func userDetails(form url.Values) (user, CredentialAddress) {
+	address := CredentialAddress{
+		BuildingNumber:           "1",
+		StreetName:               "RICHMOND PLACE",
+		DependentAddressLocality: "KINGS HEATH",
+		AddressLocality:          "BIRMINGHAM",
+		PostalCode:               "B14 7ED",
+		AddressCountry:           "GB",
+		ValidFrom:                "2021-01-01",
+	}
+
 	switch form.Get("user") {
 	case "donor":
-		return user{"Sam", "Smith", "2000-01-02"}
+		return user{"Sam", "Smith", "2000-01-02"}, address
 	case "certificate-provider":
-		return user{"Charlie", "Cooper", "1990-01-02"}
+		address.BuildingNumber = "2"
+		return user{"Charlie", "Cooper", "1990-01-02"}, address
 	case "custom":
-		return user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
+		user := user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
+
+		address := CredentialAddress{
+			BuildingNumber:           form.Get("building-number"),
+			StreetName:               form.Get("street-name"),
+			DependentAddressLocality: form.Get("line-2"),
+			AddressLocality:          form.Get("town"),
+			PostalCode:               form.Get("post-code"),
+			AddressCountry:           "GB",
+			ValidFrom:                "2021-01-01",
+		}
+
+		return user, address
 	default:
-		return user{}
+		return user{}, CredentialAddress{}
 	}
 }
 
