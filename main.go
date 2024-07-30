@@ -105,7 +105,7 @@ type UserInfoResponse struct {
 }
 
 type CredentialAddress struct {
-	UPRN                           string `json:"uprn,omitempty"`
+	UPRN                           int    `json:"uprn,omitempty"`
 	SubBuildingName                string `json:"subBuildingName,omitempty"`
 	BuildingName                   string `json:"buildingName,omitempty"`
 	BuildingNumber                 string `json:"buildingNumber,omitempty"`
@@ -472,6 +472,7 @@ func run(logger *slog.Logger) error {
 
 func userDetails(form url.Values) (user, CredentialAddress) {
 	address := CredentialAddress{
+		UPRN:                     100071428503,
 		BuildingNumber:           "1",
 		StreetName:               "RICHMOND PLACE",
 		DependentAddressLocality: "KINGS HEATH",
@@ -491,6 +492,7 @@ func userDetails(form url.Values) (user, CredentialAddress) {
 		user := user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
 
 		address := CredentialAddress{
+			UPRN:                     123,
 			BuildingNumber:           form.Get("building-number"),
 			StreetName:               form.Get("street-name"),
 			DependentAddressLocality: form.Get("line-2"),
