@@ -189,29 +189,6 @@ func jwks(kid string, publicKey ecdsa.PublicKey) Handler {
 	}
 }
 
-func token(kid, clientId, issuer string) Handler {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		code := r.PostFormValue("code")
-		accessToken := randomString("token-", 10)
-
-		session := sessions[code]
-		delete(sessions, code)
-		tokens[accessToken] = session
-
-		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
-		if err != nil {
-			return fmt.Errorf("error creating jwt: %w", err)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(TokenResponse{
-			AccessToken: accessToken,
-			TokenType:   "Bearer",
-			IDToken:     t,
-		})
-	}
-}
-
 type authorizeTemplateData struct {
 	Identity    bool
 	Header      bool
@@ -323,6 +300,30 @@ func authorize(tmpl interface {
 
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
+	}
+}
+
+func token(kid, clientId, issuer string) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		code := r.PostFormValue("code")
+		accessToken := randomString("token-", 10)
+
+		session := sessions[code]
+
+		delete(sessions, code)
+		tokens[accessToken] = session
+
+		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
+		if err != nil {
+			return fmt.Errorf("error creating jwt: %w", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(TokenResponse{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+			IDToken:     t,
+		})
 	}
 }
 
