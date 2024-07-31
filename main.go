@@ -105,7 +105,7 @@ type UserInfoResponse struct {
 }
 
 type CredentialAddress struct {
-	UPRN                           string `json:"uprn,omitempty"`
+	UPRN                           int    `json:"uprn,omitempty"`
 	SubBuildingName                string `json:"subBuildingName,omitempty"`
 	BuildingName                   string `json:"buildingName,omitempty"`
 	BuildingNumber                 string `json:"buildingNumber,omitempty"`
@@ -185,29 +185,6 @@ func jwks(kid string, publicKey ecdsa.PublicKey) Handler {
 					"alg": "ES256",
 				},
 			},
-		})
-	}
-}
-
-func token(kid, clientId, issuer string) Handler {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		code := r.PostFormValue("code")
-		accessToken := randomString("token-", 10)
-
-		session := sessions[code]
-		delete(sessions, code)
-		tokens[accessToken] = session
-
-		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
-		if err != nil {
-			return fmt.Errorf("error creating jwt: %w", err)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(TokenResponse{
-			AccessToken: accessToken,
-			TokenType:   "Bearer",
-			IDToken:     t,
 		})
 	}
 }
@@ -323,6 +300,30 @@ func authorize(tmpl interface {
 
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
+	}
+}
+
+func token(kid, clientId, issuer string) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		code := r.PostFormValue("code")
+		accessToken := randomString("token-", 10)
+
+		session := sessions[code]
+
+		delete(sessions, code)
+		tokens[accessToken] = session
+
+		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
+		if err != nil {
+			return fmt.Errorf("error creating jwt: %w", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(TokenResponse{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+			IDToken:     t,
+		})
 	}
 }
 
@@ -472,6 +473,7 @@ func run(logger *slog.Logger) error {
 
 func userDetails(form url.Values) (user, CredentialAddress) {
 	address := CredentialAddress{
+		UPRN:                     100071428503,
 		BuildingNumber:           "1",
 		StreetName:               "RICHMOND PLACE",
 		DependentAddressLocality: "KINGS HEATH",
@@ -491,6 +493,7 @@ func userDetails(form url.Values) (user, CredentialAddress) {
 		user := user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
 
 		address := CredentialAddress{
+			UPRN:                     123,
 			BuildingNumber:           form.Get("building-number"),
 			StreetName:               form.Get("street-name"),
 			DependentAddressLocality: form.Get("line-2"),

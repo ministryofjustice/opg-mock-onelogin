@@ -236,6 +236,7 @@ func TestAuthorizePost(t *testing.T) {
 					dateOfBirth: "2000-01-02",
 				},
 				address: CredentialAddress{
+					UPRN:                     100071428503,
 					BuildingNumber:           "1",
 					StreetName:               "RICHMOND PLACE",
 					DependentAddressLocality: "KINGS HEATH",
@@ -266,6 +267,7 @@ func TestAuthorizePost(t *testing.T) {
 					dateOfBirth: "1990-01-02",
 				},
 				address: CredentialAddress{
+					UPRN:                     100071428503,
 					BuildingNumber:           "2",
 					StreetName:               "RICHMOND PLACE",
 					DependentAddressLocality: "KINGS HEATH",
@@ -306,6 +308,7 @@ func TestAuthorizePost(t *testing.T) {
 					dateOfBirth: "3-02-01",
 				},
 				address: CredentialAddress{
+					UPRN:                     123,
 					BuildingNumber:           "4",
 					StreetName:               "5",
 					DependentAddressLocality: "6",
@@ -391,6 +394,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 			PostalCode:               "5",
 			AddressCountry:           "6",
 			ValidFrom:                "7",
+			UPRN:                     8,
 		},
 	}
 
@@ -411,9 +415,10 @@ func TestUserInfoWithIdentity(t *testing.T) {
 	assert.Equal(t, true, data["phone_verified"])
 	assert.Equal(t, float64(1311280970), data["updated_at"])
 	assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.")
-	assert.Contains(t, data["https://vocab.account.gov.uk/v1/address"], map[string]interface{}{
-		"addressCountry": "6", "addressLocality": "4", "buildingNumber": "1", "dependentAddressLocality": "3", "postalCode": "5", "streetName": "2", "validFrom": "7",
-	})
+	assert.Equal(t, []any{map[string]any{
+		"uprn": float64(8), "buildingNumber": "1", "streetName": "2", "dependentAddressLocality": "3", "addressLocality": "4", "postalCode": "5", "addressCountry": "6", "validFrom": "7",
+	}}, data["https://vocab.account.gov.uk/v1/address"],
+	)
 }
 
 func TestUserInfoWithIdentityUnsuccessfulIdentityCheckWithReturnCode(t *testing.T) {
