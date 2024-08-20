@@ -278,6 +278,37 @@ func TestAuthorizePost(t *testing.T) {
 				},
 			},
 		},
+		"identity - voucher": {
+			form: url.Values{
+				"redirect_uri": {"http://localhost:5050/auth/redirect"},
+				"state":        {"my-state"},
+				"nonce":        {"my-nonce"},
+				"vtr":          {`["Cl.Cm.P2"]`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/address":null}}`},
+				"user":         {"voucher"},
+			},
+			session: sessionData{
+				email:    "simulate-delivered@notifications.service.gov.uk",
+				nonce:    "my-nonce",
+				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
+				identity: true,
+				user: user{
+					firstNames:  "Vivian",
+					lastName:    "Vaughn",
+					dateOfBirth: "1995-01-02",
+				},
+				address: CredentialAddress{
+					UPRN:                     100071428503,
+					BuildingNumber:           "1",
+					StreetName:               "RICHMOND PLACE",
+					DependentAddressLocality: "KINGS HEATH",
+					AddressLocality:          "BIRMINGHAM",
+					PostalCode:               "B14 7ED",
+					AddressCountry:           "GB",
+					ValidFrom:                "2021-01-01",
+				},
+			},
+		},
 		"custom identity": {
 			form: url.Values{
 				"redirect_uri":    {"http://localhost:5050/auth/redirect"},

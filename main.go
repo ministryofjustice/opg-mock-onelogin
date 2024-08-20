@@ -489,6 +489,8 @@ func userDetails(form url.Values) (user, CredentialAddress) {
 	case "certificate-provider":
 		address.BuildingNumber = "2"
 		return user{"Charlie", "Cooper", "1990-01-02"}, address
+	case "voucher":
+		return user{"Vivian", "Vaughn", "1995-01-02"}, address
 	case "custom":
 		user := user{form.Get("first-names"), form.Get("last-name"), fmt.Sprintf("%s-%s-%s", form.Get("year"), zeroPad(form.Get("month")), zeroPad(form.Get("day")))}
 
