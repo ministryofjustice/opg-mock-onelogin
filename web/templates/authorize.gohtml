@@ -129,9 +129,35 @@
     {{ else }}
       {{ if .Sub }}
         <div class="govuk-form-group">
-          <label class="govuk-label govuk-label--m" for="f-sub">OneLogin sub</label>
-          <div class="govuk-hint">Sign in using a OneLogin sub (to ignore, leave empty)</div>
-          <input class="govuk-input" type="text" name="sub" id="f-sub" />
+          <fieldset class="govuk-fieldset" aria-describedby="subject-hint">
+            <legend class="govuk-fieldset__legend govuk-fieldset__legend--m">
+              <h2 class="govuk-fieldset__heading">
+                OneLogin Subject (User ID)
+              </h2>
+            </legend>
+            <div id="subject-hint" class="govuk-hint">
+              Sign in using a OneLogin Subject
+            </div>
+            <div class="govuk-radios" data-module="govuk-radios">
+              <div class="govuk-radios__item">
+                <input class="govuk-radios__input" id="f-sub-1" name="subject" type="radio" value="manual" data-aria-controls="cond-subject-1" aria-expanded="true" checked>
+                <label class="govuk-label govuk-radios__label" for="sub-1" id="manual-label">
+                  Specify manually (leave blank to generate from email)
+                </label>
+              </div>
+              <div class="govuk-radios__conditional" id="cond-subject-1">
+                <div class="govuk-form-group">
+                  <input class="govuk-input govuk-!-width-one-half" id="manual-subject" name="subjectValue" spellcheck="false" aria-describedby="manual-label">
+                </div>
+              </div>
+              <div class="govuk-radios__item">
+                <input class="govuk-radios__input" id="f-sub-2" name="subject" type="radio" value="fixed">
+                <label class="govuk-label govuk-radios__label" for="sub-2">
+                  Fixed value (<em>urn:fdc:mock-one-login:2023:fixed_value</em>)
+                </label>
+              </div>
+            </div>
+          </fieldset>
         </div>
       {{ end }}
 

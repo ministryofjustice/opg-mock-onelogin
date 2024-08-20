@@ -262,16 +262,16 @@ func authorize(tmpl interface {
 			email = "simulate-delivered@notifications.service.gov.uk"
 		}
 
-		sub := r.FormValue("sub")
-		if sub == "" {
-			if templateSub {
-				sub = randomString("sub-", 20)
-			} else {
-				h := sha256.New()
-				h.Write([]byte(email))
-				encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
-				sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
-			}
+		h := sha256.New()
+		h.Write([]byte(email))
+		encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+		sub := "urn:fdc:mock-one-login:2023:" + encodedEmail
+
+		subject := r.FormValue("subject")
+		if subject == "manual" && r.FormValue("subjectValue") != "" {
+			sub = r.FormValue("subjectValue")
+		} else if subject == "fixed" {
+			sub = "urn:fdc:mock-one-login:2023:fixed_value"
 		}
 
 		returnCode := ""

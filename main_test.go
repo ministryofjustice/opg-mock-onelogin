@@ -194,7 +194,8 @@ func TestAuthorizePost(t *testing.T) {
 				"redirect_uri": {"http://localhost:5050/auth/redirect"},
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
-				"sub":          {"dave"},
+				"subject":      {"manual"},
+				"subjectValue": {"dave"},
 			},
 			session: sessionData{
 				email: "simulate-delivered@notifications.service.gov.uk",
@@ -208,12 +209,27 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"email":        {"dave@example.com"},
-				"sub":          {"dave"},
+				"subject":      {"manual"},
+				"subjectValue": {"dave"},
 			},
 			session: sessionData{
 				email: "dave@example.com",
 				nonce: "my-nonce",
 				sub:   "dave",
+			},
+		},
+		"sign-in with email and fixed sub": {
+			form: url.Values{
+				"redirect_uri": {"http://localhost:5050/auth/redirect"},
+				"state":        {"my-state"},
+				"nonce":        {"my-nonce"},
+				"email":        {"dave@example.com"},
+				"subject":      {"fixed"},
+			},
+			session: sessionData{
+				email: "dave@example.com",
+				nonce: "my-nonce",
+				sub:   "urn:fdc:mock-one-login:2023:fixed_value",
 			},
 		},
 		"identity - donor": {
