@@ -272,6 +272,8 @@ func authorize(tmpl interface {
 			sub = r.FormValue("subjectValue")
 		} else if subject == "fixed" {
 			sub = "urn:fdc:mock-one-login:2023:fixed_value"
+		} else if subject == "random" {
+			sub = randomString("urn:fdc:mock-one-login:2023:", 20)
 		}
 
 		returnCode := ""
