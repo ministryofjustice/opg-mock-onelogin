@@ -30,12 +30,15 @@ var (
 	serviceRedirectUrl  = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 	templateHeader      = os.Getenv("TEMPLATE_HEADER") == "1"
 	templateSub         = os.Getenv("TEMPLATE_SUB") == "1"
+	templateSubDefault  = os.Getenv("TEMPLATE_SUB_DEFAULT")
 	templateEmail       = os.Getenv("TEMPLATE_EMAIL")
 	templateReturnCodes = os.Getenv("TEMPLATE_RETURN_CODES") == "1"
 
 	tokenSigningKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tokenSigningKid    = randomString("kid-", 8)
 
+	controllerID       = randomString("controller-", 8)
+	identityKID        = randomString(controllerID+"#kid-", 8)
 	privateKeyBytes, _ = base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSVBheDJBYW92aXlQWDF3cndmS2FWckxEOHdQbkpJcUlicTMzZm8rWHdBZDdvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSlEyVmtpZWtzNW9rSTIxY1Jma0FhOXVxN0t4TTZtMmpaWUJ4cHJsVVdCWkNFZnhxMjdwVQp0Qzd5aXplVlRiZUVqUnlJaStYalhPQjFBbDhPbHFtaXJnPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
 	privateKey, _      = jwt.ParseECPrivateKeyFromPEM(privateKeyBytes)
 
@@ -189,12 +192,41 @@ func jwks(kid string, publicKey ecdsa.PublicKey) Handler {
 	}
 }
 
+func did(cid, kid string, publicKey ecdsa.PublicKey) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=60, private")
+
+		return json.NewEncoder(w).Encode(map[string]any{
+			"@context": []string{"https://www.w3.org/ns/did/v1", "https://w3id.org/security/jwk/v1"},
+			"id":       cid,
+			"assertionMethod": []map[string]any{
+				{
+					"type":       "JsonWebKey",
+					"id":         kid,
+					"controller": cid,
+					"publicKeyJwk": map[string]any{
+						"kty": "EC",
+						"crv": "P-256",
+						"x":   base64.RawURLEncoding.EncodeToString(publicKey.X.Bytes()),
+						"y":   base64.RawURLEncoding.EncodeToString(publicKey.Y.Bytes()),
+						"alg": "ES256",
+					},
+				},
+			},
+		})
+	}
+}
+
 type authorizeTemplateData struct {
-	Identity    bool
-	Header      bool
-	Sub         bool
-	Email       string
-	ReturnCodes bool
+	Identity         bool
+	Header           bool
+	Sub              bool
+	SubDefaultFixed  bool
+	SubDefaultRandom bool
+	SubDefaultManual bool
+	Email            string
+	ReturnCodes      bool
 }
 
 func authorize(tmpl interface {
@@ -229,11 +261,14 @@ func authorize(tmpl interface {
 
 		if r.Method == http.MethodGet {
 			return tmpl.Execute(w, authorizeTemplateData{
-				Identity:    returnIdentity,
-				Header:      templateHeader,
-				Sub:         templateSub,
-				Email:       templateEmail,
-				ReturnCodes: templateReturnCodes && useReturnCodes,
+				Identity:         returnIdentity,
+				Header:           templateHeader,
+				Sub:              templateSub,
+				SubDefaultFixed:  templateSubDefault == "fixed",
+				SubDefaultRandom: templateSubDefault == "random",
+				SubDefaultManual: templateSubDefault == "manual" || templateSubDefault == "",
+				Email:            templateEmail,
+				ReturnCodes:      templateReturnCodes && useReturnCodes,
 			})
 		}
 
@@ -262,18 +297,25 @@ func authorize(tmpl interface {
 			email = "simulate-delivered@notifications.service.gov.uk"
 		}
 
-		h := sha256.New()
-		h.Write([]byte(email))
-		encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
-		sub := "urn:fdc:mock-one-login:2023:" + encodedEmail
-
-		subject := r.FormValue("subject")
-		if subject == "manual" && r.FormValue("subjectValue") != "" {
-			sub = r.FormValue("subjectValue")
-		} else if subject == "fixed" {
+		var sub string
+		switch r.FormValue("subject") {
+		case "manual":
+			if r.FormValue("subjectValue") != "" {
+				sub = r.FormValue("subjectValue")
+			} else {
+				h := sha256.New()
+				h.Write([]byte(email))
+				encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+				sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
+			}
+		case "fixed":
 			sub = "urn:fdc:mock-one-login:2023:fixed_value"
-		} else if subject == "random" {
+		case "random":
 			sub = randomString("urn:fdc:mock-one-login:2023:", 20)
+		default:
+			if !returnIdentity {
+				return fmt.Errorf("subject must be selected")
+			}
 		}
 
 		returnCode := ""
@@ -386,7 +428,9 @@ func userInfo() Handler {
 				}
 
 				userInfo.Addresses = append(userInfo.Addresses, token.address)
-				userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
+				token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+				token.Header["kid"] = identityKID
+				userInfo.CoreIdentityJWT, _ = token.SignedString(privateKey)
 			}
 		}
 
@@ -462,6 +506,7 @@ func run(logger *slog.Logger) error {
 
 	handle("/.well-known/openid-configuration", openIDConfig(c))
 	handle("/.well-known/jwks", jwks(tokenSigningKid, tokenSigningKey.PublicKey))
+	handle("/.well-known/did.json", did(controllerID, identityKID, privateKey.PublicKey))
 	handle("/authorize", authorize(templates))
 	handle("/token", token(tokenSigningKid, clientId, c.Issuer))
 	handle("/userinfo", userInfo())
