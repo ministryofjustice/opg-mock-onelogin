@@ -9,7 +9,7 @@
           </legend>
           <div class="govuk-radios" data-module="govuk-radios">
             <div class="govuk-radios__item">
-              <input class="govuk-radios__input" id="user-1" name="user" type="radio" value="donor">
+              <input class="govuk-radios__input" id="user-1" name="user" type="radio" value="donor" checked>
               <label class="govuk-label govuk-radios__label" for="user-1">
                 Sam Smith (donor)
               </label>
@@ -140,19 +140,19 @@
             </div>
             <div class="govuk-radios" data-module="govuk-radios">
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="f-sub-2" name="subject" type="radio" value="fixed">
+                <input class="govuk-radios__input" id="f-sub-2" name="subject" type="radio" value="fixed" {{ if .SubDefaultFixed }}checked{{ end }}>
                 <label class="govuk-label govuk-radios__label" for="f-sub-2">
                   Fixed value (<em>urn:fdc:mock-one-login:2023:fixed_value</em>)
                 </label>
               </div>
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="f-sub-3" name="subject" type="radio" value="random">
+                <input class="govuk-radios__input" id="f-sub-3" name="subject" type="radio" value="random" {{ if .SubDefaultRandom }}checked{{ end }}>
                 <label class="govuk-label govuk-radios__label" for="f-sub-3">
                   Random value (<em>urn:fdc:mock-one-login:2023:**********</em>)
                 </label>
               </div>
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="f-sub-1" name="subject" type="radio" value="manual" data-aria-controls="cond-subject-1" aria-expanded="true">
+                <input class="govuk-radios__input" id="f-sub-1" name="subject" type="radio" value="manual" {{ if .SubDefaultManual }}checked{{ end }} data-aria-controls="cond-subject-1" aria-expanded="true">
                 <label class="govuk-label govuk-radios__label" for="f-sub-1" id="manual-label">
                   Specify manually (leave blank to generate from email)
                 </label>

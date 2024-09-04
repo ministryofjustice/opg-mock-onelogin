@@ -146,7 +146,7 @@ func TestAuthorize(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true}, template.data)
 }
 
 func TestAuthorizeWithIdentity(t *testing.T) {
@@ -165,7 +165,7 @@ func TestAuthorizeWithIdentity(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{Identity: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, Identity: true}, template.data)
 }
 
 func TestAuthorizeWithReturnCode(t *testing.T) {
@@ -185,7 +185,7 @@ func TestAuthorizeWithReturnCode(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{ReturnCodes: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, ReturnCodes: true}, template.data)
 }
 
 func TestAuthorizePost(t *testing.T) {
@@ -198,6 +198,7 @@ func TestAuthorizePost(t *testing.T) {
 				"redirect_uri": {"http://localhost:5050/auth/redirect"},
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
+				"subject":      {"manual"},
 			},
 			session: sessionData{
 				email: "simulate-delivered@notifications.service.gov.uk",
@@ -211,6 +212,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"email":        {"dave@example.com"},
+				"subject":      {"manual"},
 			},
 			session: sessionData{
 				email: "dave@example.com",
@@ -273,7 +275,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Sam",
@@ -304,7 +305,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Charlie",
@@ -335,7 +335,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Vivian",
@@ -376,7 +375,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "John",
@@ -407,7 +405,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:      "simulate-delivered@notifications.service.gov.uk",
 				nonce:      "my-nonce",
-				sub:        "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity:   true,
 				returnCode: "X",
 			},

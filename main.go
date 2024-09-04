@@ -30,6 +30,7 @@ var (
 	serviceRedirectUrl  = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
 	templateHeader      = os.Getenv("TEMPLATE_HEADER") == "1"
 	templateSub         = os.Getenv("TEMPLATE_SUB") == "1"
+	templateSubDefault  = os.Getenv("TEMPLATE_SUB_DEFAULT")
 	templateEmail       = os.Getenv("TEMPLATE_EMAIL")
 	templateReturnCodes = os.Getenv("TEMPLATE_RETURN_CODES") == "1"
 
@@ -218,11 +219,14 @@ func did(cid, kid string, publicKey ecdsa.PublicKey) Handler {
 }
 
 type authorizeTemplateData struct {
-	Identity    bool
-	Header      bool
-	Sub         bool
-	Email       string
-	ReturnCodes bool
+	Identity         bool
+	Header           bool
+	Sub              bool
+	SubDefaultFixed  bool
+	SubDefaultRandom bool
+	SubDefaultManual bool
+	Email            string
+	ReturnCodes      bool
 }
 
 func authorize(tmpl interface {
@@ -257,11 +261,14 @@ func authorize(tmpl interface {
 
 		if r.Method == http.MethodGet {
 			return tmpl.Execute(w, authorizeTemplateData{
-				Identity:    returnIdentity,
-				Header:      templateHeader,
-				Sub:         templateSub,
-				Email:       templateEmail,
-				ReturnCodes: templateReturnCodes && useReturnCodes,
+				Identity:         returnIdentity,
+				Header:           templateHeader,
+				Sub:              templateSub,
+				SubDefaultFixed:  templateSubDefault == "fixed",
+				SubDefaultRandom: templateSubDefault == "random",
+				SubDefaultManual: templateSubDefault == "manual" || templateSubDefault == "",
+				Email:            templateEmail,
+				ReturnCodes:      templateReturnCodes && useReturnCodes,
 			})
 		}
 
@@ -290,18 +297,25 @@ func authorize(tmpl interface {
 			email = "simulate-delivered@notifications.service.gov.uk"
 		}
 
-		h := sha256.New()
-		h.Write([]byte(email))
-		encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
-		sub := "urn:fdc:mock-one-login:2023:" + encodedEmail
-
-		subject := r.FormValue("subject")
-		if subject == "manual" && r.FormValue("subjectValue") != "" {
-			sub = r.FormValue("subjectValue")
-		} else if subject == "fixed" {
+		var sub string
+		switch r.FormValue("subject") {
+		case "manual":
+			if r.FormValue("subjectValue") != "" {
+				sub = r.FormValue("subjectValue")
+			} else {
+				h := sha256.New()
+				h.Write([]byte(email))
+				encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+				sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
+			}
+		case "fixed":
 			sub = "urn:fdc:mock-one-login:2023:fixed_value"
-		} else if subject == "random" {
+		case "random":
 			sub = randomString("urn:fdc:mock-one-login:2023:", 20)
+		default:
+			if !returnIdentity {
+				return fmt.Errorf("subject must be selected")
+			}
 		}
 
 		returnCode := ""
