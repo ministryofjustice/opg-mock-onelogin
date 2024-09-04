@@ -64,6 +64,35 @@ func TestJwks(t *testing.T) {
 	assert.JSONEq(t, `{"keys":[{"kty":"EC","use":"sig","crv":"P-256","kid":"my-kid","x":"AQ","y":"Ag","alg":"ES256"}]}`, string(body))
 }
 
+func TestDID(t *testing.T) {
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+
+	h := did("my-controller", "my-controller#my-kid", ecdsa.PublicKey{X: big.NewInt(1), Y: big.NewInt(2)})
+	err := h(w, r)
+	resp := w.Result()
+	body, _ := io.ReadAll(resp.Body)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	assert.JSONEq(t, `{
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/jwk/v1"],
+  "id": "my-controller",
+  "assertionMethod": [{
+    "type": "JsonWebKey",
+    "id": "my-controller#my-kid",
+    "controller": "my-controller",
+    "publicKeyJwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "AQ",
+      "y": "Ag",
+      "alg": "ES256"
+    }
+  }]
+}`, string(body))
+}
+
 func TestToken(t *testing.T) {
 	form := url.Values{
 		"code": {"my-code"},
@@ -117,7 +146,7 @@ func TestAuthorize(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true}, template.data)
 }
 
 func TestAuthorizeWithIdentity(t *testing.T) {
@@ -136,7 +165,7 @@ func TestAuthorizeWithIdentity(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{Identity: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, Identity: true}, template.data)
 }
 
 func TestAuthorizeWithReturnCode(t *testing.T) {
@@ -156,7 +185,7 @@ func TestAuthorizeWithReturnCode(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{ReturnCodes: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, ReturnCodes: true}, template.data)
 }
 
 func TestAuthorizePost(t *testing.T) {
@@ -169,6 +198,7 @@ func TestAuthorizePost(t *testing.T) {
 				"redirect_uri": {"http://localhost:5050/auth/redirect"},
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
+				"subject":      {"manual"},
 			},
 			session: sessionData{
 				email: "simulate-delivered@notifications.service.gov.uk",
@@ -182,6 +212,7 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"email":        {"dave@example.com"},
+				"subject":      {"manual"},
 			},
 			session: sessionData{
 				email: "dave@example.com",
@@ -244,7 +275,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Sam",
@@ -275,7 +305,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Charlie",
@@ -306,7 +335,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "Vivian",
@@ -347,7 +375,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:    "simulate-delivered@notifications.service.gov.uk",
 				nonce:    "my-nonce",
-				sub:      "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity: true,
 				user: user{
 					firstNames:  "John",
@@ -378,7 +405,6 @@ func TestAuthorizePost(t *testing.T) {
 			session: sessionData{
 				email:      "simulate-delivered@notifications.service.gov.uk",
 				nonce:      "my-nonce",
-				sub:        "urn:fdc:mock-one-login:2023:QMykNslde7HiDDtluNUVQUUnFpbu1ZAKiOr/QZ6sY34=",
 				identity:   true,
 				returnCode: "X",
 			},
@@ -461,7 +487,7 @@ func TestUserInfoWithIdentity(t *testing.T) {
 	assert.Equal(t, "01406946277", data["phone"])
 	assert.Equal(t, true, data["phone_verified"])
 	assert.Equal(t, float64(1311280970), data["updated_at"])
-	assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.")
+	assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], ".eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.")
 	assert.Equal(t, []any{map[string]any{
 		"uprn": float64(8), "buildingNumber": "1", "streetName": "2", "dependentAddressLocality": "3", "addressLocality": "4", "postalCode": "5", "addressCountry": "6", "validFrom": "7",
 	}}, data["https://vocab.account.gov.uk/v1/address"],
