@@ -36,6 +36,8 @@ var (
 	tokenSigningKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tokenSigningKid    = randomString("kid-", 8)
 
+	controllerID       = randomString("controller-", 8)
+	identityKID        = randomString(controllerID+"#kid-", 8)
 	privateKeyBytes, _ = base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSVBheDJBYW92aXlQWDF3cndmS2FWckxEOHdQbkpJcUlicTMzZm8rWHdBZDdvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSlEyVmtpZWtzNW9rSTIxY1Jma0FhOXVxN0t4TTZtMmpaWUJ4cHJsVVdCWkNFZnhxMjdwVQp0Qzd5aXplVlRiZUVqUnlJaStYalhPQjFBbDhPbHFtaXJnPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
 	privateKey, _      = jwt.ParseECPrivateKeyFromPEM(privateKeyBytes)
 
@@ -183,6 +185,32 @@ func jwks(kid string, publicKey ecdsa.PublicKey) Handler {
 					"x":   base64.RawURLEncoding.EncodeToString(publicKey.X.Bytes()),
 					"y":   base64.RawURLEncoding.EncodeToString(publicKey.Y.Bytes()),
 					"alg": "ES256",
+				},
+			},
+		})
+	}
+}
+
+func did(cid, kid string, publicKey ecdsa.PublicKey) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=60, private")
+
+		return json.NewEncoder(w).Encode(map[string]any{
+			"@context": []string{"https://www.w3.org/ns/did/v1", "https://w3id.org/security/jwk/v1"},
+			"id":       cid,
+			"assertionMethod": []map[string]any{
+				{
+					"type":       "JsonWebKey",
+					"id":         kid,
+					"controller": cid,
+					"publicKeyJwk": map[string]any{
+						"kty": "EC",
+						"crv": "P-256",
+						"x":   base64.RawURLEncoding.EncodeToString(publicKey.X.Bytes()),
+						"y":   base64.RawURLEncoding.EncodeToString(publicKey.Y.Bytes()),
+						"alg": "ES256",
+					},
 				},
 			},
 		})
@@ -386,7 +414,9 @@ func userInfo() Handler {
 				}
 
 				userInfo.Addresses = append(userInfo.Addresses, token.address)
-				userInfo.CoreIdentityJWT, _ = jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(privateKey)
+				token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+				token.Header["kid"] = identityKID
+				userInfo.CoreIdentityJWT, _ = token.SignedString(privateKey)
 			}
 		}
 
@@ -462,6 +492,7 @@ func run(logger *slog.Logger) error {
 
 	handle("/.well-known/openid-configuration", openIDConfig(c))
 	handle("/.well-known/jwks", jwks(tokenSigningKid, tokenSigningKey.PublicKey))
+	handle("/.well-known/did.json", did(controllerID, identityKID, privateKey.PublicKey))
 	handle("/authorize", authorize(templates))
 	handle("/token", token(tokenSigningKid, clientId, c.Issuer))
 	handle("/userinfo", userInfo())
