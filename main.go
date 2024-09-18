@@ -397,9 +397,9 @@ func userInfo() Handler {
 			} else {
 				var vtr string
 				switch token.vtr {
-				case "Cl.Cm.P1":
+				case `["Cl.Cm.P1"]`:
 					vtr = "P1"
-				case "Cl.Cm.P2":
+				case `["Cl.Cm.P2"]`:
 					vtr = "P2"
 				default:
 					return fmt.Errorf("unexpected vtr requested: %s", token.vtr)
