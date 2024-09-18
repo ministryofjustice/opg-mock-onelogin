@@ -291,6 +291,7 @@ func TestAuthorizePost(t *testing.T) {
 					AddressCountry:           "GB",
 					ValidFrom:                "2021-01-01",
 				},
+				vtr: `["Cl.Cm.P2"]`,
 			},
 		},
 		"identity - certificate provider": {
@@ -321,6 +322,7 @@ func TestAuthorizePost(t *testing.T) {
 					AddressCountry:           "GB",
 					ValidFrom:                "2021-01-01",
 				},
+				vtr: `["Cl.Cm.P2"]`,
 			},
 		},
 		"identity - voucher": {
@@ -351,6 +353,7 @@ func TestAuthorizePost(t *testing.T) {
 					AddressCountry:           "GB",
 					ValidFrom:                "2021-01-01",
 				},
+				vtr: `["Cl.Cm.P2"]`,
 			},
 		},
 		"custom identity": {
@@ -391,6 +394,7 @@ func TestAuthorizePost(t *testing.T) {
 					AddressCountry:           "GB",
 					ValidFrom:                "2021-01-01",
 				},
+				vtr: `["Cl.Cm.P2"]`,
 			},
 		},
 		"unsuccessful identity check with return code": {
@@ -407,6 +411,38 @@ func TestAuthorizePost(t *testing.T) {
 				nonce:      "my-nonce",
 				identity:   true,
 				returnCode: "X",
+				vtr:        `["Cl.Cm.P2"]`,
+			},
+		},
+		"identity - low confidence": {
+			form: url.Values{
+				"redirect_uri": {"http://localhost:5050/auth/redirect"},
+				"state":        {"my-state"},
+				"nonce":        {"my-nonce"},
+				"vtr":          {`["Cl.Cm.P1"]`},
+				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/address":null}}`},
+				"user":         {"donor"},
+			},
+			session: sessionData{
+				email:    "simulate-delivered@notifications.service.gov.uk",
+				nonce:    "my-nonce",
+				identity: true,
+				user: user{
+					firstNames:  "Sam",
+					lastName:    "Smith",
+					dateOfBirth: "2000-01-02",
+				},
+				address: CredentialAddress{
+					UPRN:                     100071428503,
+					BuildingNumber:           "1",
+					StreetName:               "RICHMOND PLACE",
+					DependentAddressLocality: "KINGS HEATH",
+					AddressLocality:          "BIRMINGHAM",
+					PostalCode:               "B14 7ED",
+					AddressCountry:           "GB",
+					ValidFrom:                "2021-01-01",
+				},
+				vtr: `["Cl.Cm.P1"]`,
 			},
 		},
 	}
@@ -450,6 +486,61 @@ func TestUserInfo(t *testing.T) {
 }
 
 func TestUserInfoWithIdentity(t *testing.T) {
+	testcases := map[string]string{
+		"Cl.Cm.P1": ".eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMSIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.",
+		"Cl.Cm.P2": ".eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.",
+	}
+
+	for vtr, expectedJWT := range testcases {
+		t.Run(vtr, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r, _ := http.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Add("Authorization", "Bearer my-token")
+
+			tokens["my-token"] = sessionData{
+				user:     user{"Sam", "Smith", "2000-01-02"},
+				sub:      "my-sub",
+				email:    "my-email",
+				identity: true,
+				address: CredentialAddress{
+					BuildingNumber:           "1",
+					StreetName:               "2",
+					DependentAddressLocality: "3",
+					AddressLocality:          "4",
+					PostalCode:               "5",
+					AddressCountry:           "6",
+					ValidFrom:                "7",
+					UPRN:                     8,
+				},
+				vtr: vtr,
+			}
+
+			h := userInfo()
+			err := h(w, r)
+			resp := w.Result()
+			body, _ := io.ReadAll(resp.Body)
+
+			var data map[string]any
+			json.Unmarshal(body, &data)
+
+			assert.Nil(t, err)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+			assert.Equal(t, "my-sub", data["sub"])
+			assert.Equal(t, "my-email", data["email"])
+			assert.Equal(t, true, data["email_verified"])
+			assert.Equal(t, "01406946277", data["phone"])
+			assert.Equal(t, true, data["phone_verified"])
+			assert.Equal(t, float64(1311280970), data["updated_at"])
+			assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], expectedJWT)
+			assert.Equal(t, []any{map[string]any{
+				"uprn": float64(8), "buildingNumber": "1", "streetName": "2", "dependentAddressLocality": "3", "addressLocality": "4", "postalCode": "5", "addressCountry": "6", "validFrom": "7",
+			}}, data["https://vocab.account.gov.uk/v1/address"],
+			)
+		})
+	}
+}
+
+func TestUserInfoWithUnexpectedVTR(t *testing.T) {
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Add("Authorization", "Bearer my-token")
@@ -459,39 +550,13 @@ func TestUserInfoWithIdentity(t *testing.T) {
 		sub:      "my-sub",
 		email:    "my-email",
 		identity: true,
-		address: CredentialAddress{
-			BuildingNumber:           "1",
-			StreetName:               "2",
-			DependentAddressLocality: "3",
-			AddressLocality:          "4",
-			PostalCode:               "5",
-			AddressCountry:           "6",
-			ValidFrom:                "7",
-			UPRN:                     8,
-		},
+		vtr:      "not-expected",
 	}
 
 	h := userInfo()
 	err := h(w, r)
-	resp := w.Result()
-	body, _ := io.ReadAll(resp.Body)
 
-	var data map[string]any
-	json.Unmarshal(body, &data)
-
-	assert.Nil(t, err)
-	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-	assert.Equal(t, "my-sub", data["sub"])
-	assert.Equal(t, "my-email", data["email"])
-	assert.Equal(t, true, data["email_verified"])
-	assert.Equal(t, "01406946277", data["phone"])
-	assert.Equal(t, true, data["phone_verified"])
-	assert.Equal(t, float64(1311280970), data["updated_at"])
-	assert.Contains(t, data["https://vocab.account.gov.uk/v1/coreIdentityJWT"], ".eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmFjY291bnQuZ292LnVrLyIsInN1YiI6Im15LXN1YiIsImF1ZCI6WyJ0aGVDbGllbnRJZCJdLCJleHAiOjE1Nzc5MzQ0MjUsIm5iZiI6MTU3NzkzNDI0NSwiaWF0IjoxNTc3OTM0MjQ1LCJ2b3QiOiJQMiIsInZ0bSI6Imh0dHBzOi8vb2lkYy5hY2NvdW50Lmdvdi51ay90cnVzdG1hcmsiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJiaXJ0aERhdGUiOlt7InZhbHVlIjoiMjAwMC0wMS0wMiJ9XSwibmFtZSI6W3sibmFtZVBhcnRzIjpbeyJ0eXBlIjoiR2l2ZW5OYW1lIiwidmFsdWUiOiJTYW0ifSx7InR5cGUiOiJGYW1pbHlOYW1lIiwidmFsdWUiOiJTbWl0aCJ9XSwidmFsaWRGcm9tIjoiMjAwMC0wMS0wMSJ9XX0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJWZXJpZmlhYmxlSWRlbnRpdHlDcmVkZW50aWFsIl19fQ.")
-	assert.Equal(t, []any{map[string]any{
-		"uprn": float64(8), "buildingNumber": "1", "streetName": "2", "dependentAddressLocality": "3", "addressLocality": "4", "postalCode": "5", "addressCountry": "6", "validFrom": "7",
-	}}, data["https://vocab.account.gov.uk/v1/address"],
-	)
+	assert.Error(t, err)
 }
 
 func TestUserInfoWithIdentityUnsuccessfulIdentityCheckWithReturnCode(t *testing.T) {
