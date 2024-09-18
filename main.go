@@ -72,6 +72,8 @@ type sessionData struct {
 	returnCode string
 	// address associated with the user
 	address CredentialAddress
+	// vtr defines which vector of trust should be returned with an identity
+	vtr string
 }
 
 type OpenIdConfig struct {
@@ -247,7 +249,7 @@ func authorize(tmpl interface {
 			}
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/coreIdentityJWT"]; ok {
-				returnIdentity = r.FormValue("vtr") == `["Cl.Cm.P2"]`
+				returnIdentity = r.FormValue("vtr") == `["Cl.Cm.P2"]` || r.FormValue("vtr") == `["Cl.Cm.P1"]`
 			}
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/returnCode"]; ok {
@@ -338,6 +340,7 @@ func authorize(tmpl interface {
 			identity:   returnIdentity,
 			returnCode: returnCode,
 			address:    address,
+			vtr:        r.FormValue("vtr"),
 		}
 
 		u.RawQuery = q.Encode()
@@ -392,6 +395,16 @@ func userInfo() Handler {
 			if token.returnCode != "" {
 				userInfo.ReturnCode = append(userInfo.ReturnCode, ReturnCodeInfo{Code: token.returnCode})
 			} else {
+				var vtr string
+				switch token.vtr {
+				case "Cl.Cm.P1":
+					vtr = "P1"
+				case "Cl.Cm.P2":
+					vtr = "P2"
+				default:
+					return fmt.Errorf("unexpected vtr requested: %s", token.vtr)
+				}
+
 				claims := JWTCoreIdentity{
 					RegisteredClaims: jwt.RegisteredClaims{
 						Issuer:    "https://identity.account.gov.uk/", // production identity url
@@ -401,7 +414,7 @@ func userInfo() Handler {
 						IssuedAt:  jwt.NewNumericDate(now()),
 						NotBefore: jwt.NewNumericDate(now()),
 					},
-					VectorOfTrust:   "P2",
+					VectorOfTrust:   vtr,
 					VectorTrustMark: "https://oidc.account.gov.uk/trustmark", // production trustmark url
 					VerifiableCredential: map[string]any{
 						"type": []string{
