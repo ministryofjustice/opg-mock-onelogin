@@ -3,7 +3,8 @@ module github.com/ministryofjustice/opg-mock-onelogin
 go 1.22
 
 require (
-	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/stretchr/testify v1.10.0
 )
 
