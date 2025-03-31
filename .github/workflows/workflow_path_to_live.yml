@@ -32,7 +32,7 @@ jobs:
     name: "Generate the semver tag value"
     uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semver-tag.yml@main
     with:
-      branch_name: "${{ needs.branch_name.outputs.parsed }}"
+      branch_name: "${{ needs.branch_name.outputs.branch_name }}"
     secrets: inherit
 
   build_scan_push:
