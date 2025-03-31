@@ -17,7 +17,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	randomString = func(prefix string, length int) string {
+	randomString = func(_ string, _ int) string {
 		return "random"
 	}
 
@@ -146,7 +146,7 @@ func TestAuthorize(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultEmail: true}, template.data)
 }
 
 func TestAuthorizeWithIdentity(t *testing.T) {
@@ -165,7 +165,7 @@ func TestAuthorizeWithIdentity(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, Identity: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultEmail: true, Identity: true}, template.data)
 }
 
 func TestAuthorizeWithReturnCode(t *testing.T) {
@@ -185,7 +185,7 @@ func TestAuthorizeWithReturnCode(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, w, template.w)
-	assert.Equal(t, authorizeTemplateData{SubDefaultManual: true, ReturnCodes: true}, template.data)
+	assert.Equal(t, authorizeTemplateData{SubDefaultEmail: true, ReturnCodes: true}, template.data)
 }
 
 func TestAuthorizePost(t *testing.T) {
@@ -198,7 +198,7 @@ func TestAuthorizePost(t *testing.T) {
 				"redirect_uri": {"http://localhost:5050/auth/redirect"},
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
-				"subject":      {"manual"},
+				"subject":      {"email"},
 			},
 			session: sessionData{
 				email: "simulate-delivered@notifications.service.gov.uk",
@@ -212,41 +212,12 @@ func TestAuthorizePost(t *testing.T) {
 				"state":        {"my-state"},
 				"nonce":        {"my-nonce"},
 				"email":        {"dave@example.com"},
-				"subject":      {"manual"},
+				"subject":      {"email"},
 			},
 			session: sessionData{
 				email: "dave@example.com",
 				nonce: "my-nonce",
 				sub:   "urn:fdc:mock-one-login:2023:ezQhE1D/Vnlwl04eK5jTGaYBlp50/RqVe8iJuDMtAOs=",
-			},
-		},
-		"sign-in with sub": {
-			form: url.Values{
-				"redirect_uri": {"http://localhost:5050/auth/redirect"},
-				"state":        {"my-state"},
-				"nonce":        {"my-nonce"},
-				"subject":      {"manual"},
-				"subjectValue": {"dave"},
-			},
-			session: sessionData{
-				email: "simulate-delivered@notifications.service.gov.uk",
-				nonce: "my-nonce",
-				sub:   "dave",
-			},
-		},
-		"sign-in with email and sub": {
-			form: url.Values{
-				"redirect_uri": {"http://localhost:5050/auth/redirect"},
-				"state":        {"my-state"},
-				"nonce":        {"my-nonce"},
-				"email":        {"dave@example.com"},
-				"subject":      {"manual"},
-				"subjectValue": {"dave"},
-			},
-			session: sessionData{
-				email: "dave@example.com",
-				nonce: "my-nonce",
-				sub:   "dave",
 			},
 		},
 		"sign-in with email and fixed sub": {
@@ -404,7 +375,7 @@ func TestAuthorizePost(t *testing.T) {
 				"nonce":        {"my-nonce"},
 				"vtr":          {`["Cl.Cm.P2"]`},
 				"claims":       {`{"userinfo":{"https://vocab.account.gov.uk/v1/coreIdentityJWT":null,"https://vocab.account.gov.uk/v1/returnCode":null}}`},
-				"return-code":  {"X"},
+				"user":         {"return-code:X"},
 			},
 			session: sessionData{
 				email:      "simulate-delivered@notifications.service.gov.uk",
@@ -589,7 +560,7 @@ func TestUserInfoWithIdentityUnsuccessfulIdentityCheckWithReturnCode(t *testing.
 	assert.Equal(t, float64(1311280970), data["updated_at"])
 	assert.Contains(t,
 		data["https://vocab.account.gov.uk/v1/returnCode"],
-		map[string]interface{}{"code": "X"},
+		map[string]any{"code": "X"},
 	)
 }
 
