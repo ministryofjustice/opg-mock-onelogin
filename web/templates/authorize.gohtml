@@ -110,13 +110,13 @@
             {{ if .ReturnCodes }}
               <div class="govuk-radios__divider">or</div>
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="unsuccessful-id-check-1" name="return-code" type="radio" value="X">
+                <input class="govuk-radios__input" id="unsuccessful-id-check-1" name="user" type="radio" value="return-code:X">
                 <label class="govuk-label govuk-radios__label" for="unsuccessful-id-check-1">
                   Unable to prove identity (X)
                 </label>
               </div>
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="unsuccessful-id-check-2" name="return-code" type="radio" value="T">
+                <input class="govuk-radios__input" id="unsuccessful-id-check-2" name="user" type="radio" value="return-code:T">
                 <label class="govuk-label govuk-radios__label" for="unsuccessful-id-check-2">
                   Failed identity check (T)
                 </label>
@@ -142,25 +142,20 @@
               <div class="govuk-radios__item">
                 <input class="govuk-radios__input" id="f-sub-2" name="subject" type="radio" value="fixed" {{ if .SubDefaultFixed }}checked{{ end }}>
                 <label class="govuk-label govuk-radios__label" for="f-sub-2">
-                  Fixed value (<em>urn:fdc:mock-one-login:2023:fixed_value</em>)
+                  Fixed (<em>urn:fdc:mock-one-login:2023:fixed_value</em>)
                 </label>
               </div>
               <div class="govuk-radios__item">
                 <input class="govuk-radios__input" id="f-sub-3" name="subject" type="radio" value="random" {{ if .SubDefaultRandom }}checked{{ end }}>
                 <label class="govuk-label govuk-radios__label" for="f-sub-3">
-                  Random value (<em>urn:fdc:mock-one-login:2023:**********</em>)
+                  Random (<em>urn:fdc:mock-one-login:2023:${random("a-zA-Z0-9", 20)}</em>)
                 </label>
               </div>
               <div class="govuk-radios__item">
-                <input class="govuk-radios__input" id="f-sub-1" name="subject" type="radio" value="manual" {{ if .SubDefaultManual }}checked{{ end }} data-aria-controls="cond-subject-1" aria-expanded="true">
-                <label class="govuk-label govuk-radios__label" for="f-sub-1" id="manual-label">
-                  Specify manually (leave blank to generate from email)
+                <input class="govuk-radios__input" id="f-sub-1" name="subject" type="radio" value="email" {{ if .SubDefaultEmail }}checked{{ end }}>
+                <label class="govuk-label govuk-radios__label" for="f-sub-1">
+                  Email (<em>urn:fdc:mock-one-login:2023:${base64(sha256(email))}</em>)
                 </label>
-              </div>
-              <div class="govuk-radios__conditional" id="cond-subject-1">
-                <div class="govuk-form-group">
-                  <input class="govuk-input govuk-!-width-one-half" id="manual-subject" name="subjectValue" spellcheck="false" aria-describedby="manual-label">
-                </div>
               </div>
             </div>
           </fieldset>
@@ -170,7 +165,7 @@
       <div class="govuk-form-group">
         <label class="govuk-label govuk-label--m" for="f-email">Email</label>
         <div class="govuk-hint">Set email in OneLogin UserInfo (leave empty to set as test email address)</div>
-        <input class="govuk-input" type="text" name="email" id="f-email" value="{{ .Email }}" />
+        <input class="govuk-input" type="text" name="email" id="f-email" value="{{ .Email }}" placeholder="simulate-delivered@notifications.service.gov.uk" />
       </div>
     {{ end }}
 

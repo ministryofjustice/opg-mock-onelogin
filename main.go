@@ -226,7 +226,7 @@ type authorizeTemplateData struct {
 	Sub              bool
 	SubDefaultFixed  bool
 	SubDefaultRandom bool
-	SubDefaultManual bool
+	SubDefaultEmail  bool
 	Email            string
 	ReturnCodes      bool
 }
@@ -268,7 +268,7 @@ func authorize(tmpl interface {
 				Sub:              templateSub,
 				SubDefaultFixed:  templateSubDefault == "fixed",
 				SubDefaultRandom: templateSubDefault == "random",
-				SubDefaultManual: templateSubDefault == "manual" || templateSubDefault == "",
+				SubDefaultEmail:  templateSubDefault == "email" || templateSubDefault == "manual" || templateSubDefault == "",
 				Email:            templateEmail,
 				ReturnCodes:      templateReturnCodes && useReturnCodes,
 			})
@@ -301,15 +301,11 @@ func authorize(tmpl interface {
 
 		var sub string
 		switch r.FormValue("subject") {
-		case "manual":
-			if r.FormValue("subjectValue") != "" {
-				sub = r.FormValue("subjectValue")
-			} else {
-				h := sha256.New()
-				h.Write([]byte(email))
-				encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
-				sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
-			}
+		case "email":
+			h := sha256.New()
+			h.Write([]byte(email))
+			encodedEmail := base64.StdEncoding.EncodeToString(h.Sum(nil))
+			sub = "urn:fdc:mock-one-login:2023:" + encodedEmail
 		case "fixed":
 			sub = "urn:fdc:mock-one-login:2023:fixed_value"
 		case "random":
@@ -322,7 +318,7 @@ func authorize(tmpl interface {
 
 		returnCode := ""
 		if useReturnCodes {
-			returnCode = r.FormValue("return-code")
+			_, returnCode, _ = strings.Cut(r.FormValue("user"), "return-code:")
 		}
 
 		user, a := userDetails(r.PostForm)
