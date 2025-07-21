@@ -23,13 +23,17 @@ import (
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 var (
-	clientId            = envGet("CLIENT_ID", "theClientId")
-	internalURL         = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
-	port                = envGet("PORT", "8080")
-	publicURL           = envGet("PUBLIC_URL", "http://localhost:8080")
-	serviceRedirectUrl  = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
-	templateHeader      = os.Getenv("TEMPLATE_HEADER") == "1"
-	templateSub         = os.Getenv("TEMPLATE_SUB") == "1"
+	clientId           = envGet("CLIENT_ID", "theClientId")
+	internalURL        = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
+	port               = envGet("PORT", "8080")
+	publicURL          = envGet("PUBLIC_URL", "http://localhost:8080")
+	serviceRedirectUrl = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
+	templateHeader     = os.Getenv("TEMPLATE_HEADER") == "1"
+	// templateSub will allow the user to select how to choose the sub: fixed,
+	// random or email based.
+	templateSub = os.Getenv("TEMPLATE_SUB") == "1"
+	// templateOnlySub will show the user a single field to enter a sub.
+	templateOnlySub     = os.Getenv("TEMPLATE_SUB") == "2"
 	templateSubDefault  = os.Getenv("TEMPLATE_SUB_DEFAULT")
 	templateEmail       = os.Getenv("TEMPLATE_EMAIL")
 	templateReturnCodes = os.Getenv("TEMPLATE_RETURN_CODES") == "1"
@@ -227,6 +231,7 @@ type authorizeTemplateData struct {
 	SubDefaultFixed  bool
 	SubDefaultRandom bool
 	SubDefaultEmail  bool
+	OnlySub          bool
 	Email            string
 	ReturnCodes      bool
 }
@@ -269,6 +274,7 @@ func authorize(tmpl interface {
 				SubDefaultFixed:  templateSubDefault == "fixed",
 				SubDefaultRandom: templateSubDefault == "random",
 				SubDefaultEmail:  templateSubDefault == "email" || templateSubDefault == "manual" || templateSubDefault == "",
+				OnlySub:          templateOnlySub,
 				Email:            templateEmail,
 				ReturnCodes:      templateReturnCodes && useReturnCodes,
 			})
@@ -310,6 +316,10 @@ func authorize(tmpl interface {
 			sub = "urn:fdc:mock-one-login:2023:fixed_value"
 		case "random":
 			sub = randomString("urn:fdc:mock-one-login:2023:", 20)
+		case "provided":
+			h := sha256.New()
+			h.Write([]byte(r.FormValue("provided")))
+			sub = "urn:fdc:mock-one-login:2023:" + base64.StdEncoding.EncodeToString(h.Sum(nil))
 		default:
 			if !returnIdentity {
 				return fmt.Errorf("subject must be selected")

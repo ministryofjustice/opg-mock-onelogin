@@ -160,13 +160,22 @@
             </div>
           </fieldset>
         </div>
+      {{ else if .OnlySub }}
+        <input type="hidden" name="subject" value="provided">
+        <div class="govuk-form-group">
+          <label class="govuk-label govuk-label--m" for="f-provided">Enter the code you were provided</label>
+          <div class="govuk-hint">Sign in using a OneLogin Subject</div>
+          <input class="govuk-input" type="text" name="provided" id="f-provided" />
+        </div>
       {{ end }}
 
-      <div class="govuk-form-group">
-        <label class="govuk-label govuk-label--m" for="f-email">Email</label>
-        <div class="govuk-hint">Set email in OneLogin UserInfo (leave empty to set as test email address)</div>
-        <input class="govuk-input" type="text" name="email" id="f-email" value="{{ .Email }}" placeholder="simulate-delivered@notifications.service.gov.uk" />
-      </div>
+      {{ if not .OnlySub }}
+        <div class="govuk-form-group">
+          <label class="govuk-label govuk-label--m" for="f-email">Email</label>
+          <div class="govuk-hint">Set email in OneLogin UserInfo (leave empty to set as test email address)</div>
+          <input class="govuk-input" type="text" name="email" id="f-email" value="{{ .Email }}" placeholder="simulate-delivered@notifications.service.gov.uk" />
+        </div>
+      {{ end }}
     {{ end }}
 
     <button type="submit" class="govuk-button" data-module="govuk-button">Continue</button>
