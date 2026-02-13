@@ -1,6 +1,8 @@
-FROM golang:1.24.4-alpine AS build-env
+FROM golang:1.25-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS build-env
 
 RUN apk --no-cache add openssl
+
+RUN apk update busybox
 
 WORKDIR /app
 
