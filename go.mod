@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
