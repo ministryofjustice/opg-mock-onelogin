@@ -104,7 +104,7 @@ jobs:
           tags: ${{ steps.docker_tags.outputs.tags }}
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.34.0
         env:
           TRIVY_DB_REPOSITORY: ${{ steps.login_ecr.outputs.registry }}/trivy-db-public-ecr/aquasecurity/trivy-db:2
           TRIVY_JAVA_DB_REPOSITORY: ${{ steps.login_ecr.outputs.registry }}/trivy-db-public-ecr/aquasecurity/trivy-java-db:1
