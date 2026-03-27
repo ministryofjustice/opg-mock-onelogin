@@ -1,51 +1,50 @@
 {
-    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": [
-      "config:base",
-      "schedule:earlyMondays"
-    ],
-    "branchPrefix": "renovate-",
-    "commitMessageAction": "Renovate Update",
-    "labels": [
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "schedule:earlyMondays"
+  ],
+  "branchPrefix": "renovate-",
+  "branchNameStrict": true,
+  "commitMessageAction": "Renovate Update",
+  "labels": [
       "Dependencies",
       "Renovate"
-    ],
-    "prConcurrentLimit": 0,
-    "branchConcurrentLimit": 0,
-    "separateMultipleMajor": true,
-    "lockFileMaintenance": { "enabled": false },
-    "packageRules": [
+  ],
+  "minimumReleaseAge": "7 days",
+  "packageRules": [
       {
-        "automerge": true,
-        "groupName": "Patch & Minor Updates",
-        "groupSlug": "all-minor-patch-updates",
-        "labels": [
-          "Dependencies",
-          "Renovate"
-        ],
-        "matchPackagePatterns": [
-          "*"
-        ],
-        "matchUpdateTypes": [
-          "minor",
-          "patch"
-        ],
-        "prCreation": "immediate",
-        "prPriority": 4,
-        "stabilityDays": 3
-      }
-    ],
-    "major": {
-      "automerge": false,
+            "automerge": true,
+            "groupName": "Patch & Minor Updates",
+            "groupSlug": "all-minor-patch-updates",
+            "matchUpdateTypes": ["minor", "patch"],
+            "prPriority": 1,
+            "matchPackageNames": ["*"]
+        },
+        {
+            "automerge": true,
+            "groupName": "Github Patch & Minor Updates",
+            "groupSlug": "github-minor-patch-updates",
+            "matchUpdateTypes": ["minor", "patch"],
+            "prPriority": 2,
+            "matchPackageNames": ["*"],
+            "matchFileNames": [".github/**"]
+        }
+  ],
+  "major": {
       "labels": [
           "Dependencies",
           "Renovate"
-      ],
-      "prCreation": "not-pending",
-      "stabilityDays": 3,
-      "prPriority": 0
-    },
-    "vulnerabilityAlerts": {
-      "enabled": false
-    }
+      ]
+  },
+  "vulnerabilityAlerts": {
+      "groupName": "Vulnerability Patches",
+      "dependencyDashboardApproval": false,
+      "minimumReleaseAge": null,
+      "rangeStrategy": "update-lockfile",
+      "commitMessagePrefix": "[SECURITY]",
+      "branchTopic": "{{{datasource}}}-{{{depName}}}-vulnerability",
+      "prCreation": "immediate"
   }
+}

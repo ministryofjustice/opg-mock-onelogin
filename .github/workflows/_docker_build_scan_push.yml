@@ -31,7 +31,7 @@ defaults:
 
 jobs:
   build_scan_push:
-    name: "Docker build, trivy scan, ECR push"
+    name: "Docker build, Snyk scan, ECR push"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -40,14 +40,12 @@ jobs:
           - docker_build_directory: .
             image_app_name: mock-onelogin
             ecr_repository: mock-onelogin
-    env:
-      sarif_file: trivy-results.sarif
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Go
-        uses: actions/setup-go@v5.5.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: '^1.22'
           cache-dependency-path: "**/*.sum"
@@ -56,21 +54,19 @@ jobs:
         run: |
           go test -v ./...
 
-      - uses: unfor19/install-aws-cli-action@v1
+      - uses: unfor19/install-aws-cli-action@f5b46b7f32cf5e7ebd652656c5036bf83dd1e60c # 1.0.8
 
-      - name: Configure AWS Credentials With Assumed Role to Management
-        uses: aws-actions/configure-aws-credentials@v4.2.1
+      - name: Configure OIDC AWS credentials for ECR push
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_ACTIONS }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_ACTIONS }}
-          aws-region: eu-west-1
-          role-to-assume: arn:aws:iam::311462405659:role/shared-ci
+          role-to-assume: ${{ vars.OIDC_ECR_ROLE }}
+          role-session-name: opg-mock-onelogin-github-actions-ecr-push
           role-duration-seconds: 900
-          role-session-name: OPGMockOneLoginCIPipeline
+          aws-region: eu-west-1
 
       - name: ECR Login
         id: login_ecr
-        uses: aws-actions/amazon-ecr-login@v2.0.1
+        uses: aws-actions/amazon-ecr-login@c962da2960ed15f492addc26fffa274485265950 # v2.0.2
         with:
           registries: 311462405659
 
@@ -89,13 +85,13 @@ jobs:
           echo "semver_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -103,11 +99,19 @@ jobs:
           push: true
           tags: ${{ steps.docker_tags.outputs.tags }}
 
-      - name: Trivy scan
-        run: exit 1
+      - name: Pull Image Locally for Scanning
+        run: docker image pull ${{ steps.docker_tags.outputs.tags }}
 
-      - name: Trivy scan upload to github
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Snyk Scan
+        uses: ministryofjustice/opg-github-actions/actions/snyk-scan@8dea82fc8b8e7ffca431f0fb83848d523147ccd8 # v4.5.0
+        with:
+          SNYK_TEST_IMAGE: ${{ steps.docker_tags.outputs.semver_tag }}
+          SNYK_TOKEN: ${{ secrets.SNYK_OPG_ORG_TOKEN }}
+
+      - name: Upload Snyk scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98 # v4.32.6
         if: always()
         with:
-          sarif_file: ${{ env.sarif_file }}
+          sarif_file: test-results/snyk.sarif
+          category: snyk-docker
+
