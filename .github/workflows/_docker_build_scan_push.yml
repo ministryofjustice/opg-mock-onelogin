@@ -31,7 +31,7 @@ defaults:
 
 jobs:
   build_scan_push:
-    name: "Docker build, trivy scan, ECR push"
+    name: "Docker build, Snyk scan, ECR push"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -98,6 +98,8 @@ jobs:
           file: ${{ matrix.data.docker_build_directory }}/Dockerfile
           push: true
           tags: ${{ steps.docker_tags.outputs.tags }}
+
+      - run: docker image ls 
 
       - name: Snyk Scan
         uses: ministryofjustice/opg-github-actions/actions/snyk-scan@8dea82fc8b8e7ffca431f0fb83848d523147ccd8 # v4.5.0
