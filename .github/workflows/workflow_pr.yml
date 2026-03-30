@@ -25,12 +25,12 @@ defaults:
 jobs:
   branch_name:
     name: "Generate a safe branch name"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-branch-name.yml@v3.13.0
+    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-branch-name.yml@3f4fe71f604035ac4990efc69629404852d81e62 # v3.18.1
 
   semver_tag:
     needs: [branch_name]
     name: "Generate the semver tag value"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semver-tag.yml@v3.13.0
+    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semver-tag.yml@3f4fe71f604035ac4990efc69629404852d81e62 # v3.18.1
     with:
       branch_name: "${{ needs.branch_name.outputs.safe }}"
     secrets: inherit
