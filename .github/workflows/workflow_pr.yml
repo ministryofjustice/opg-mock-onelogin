@@ -23,20 +23,25 @@ defaults:
     shell: bash
 
 jobs:
-  branch_name:
-    name: "Generate a safe branch name"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-branch-name.yml@v3.13.0
-
   semver_tag:
-    needs: [branch_name]
-    name: "Generate the semver tag value"
-    uses: ministryofjustice/opg-github-workflows/.github/workflows/data-parse-semver-tag.yml@v3.13.0
-    with:
-      branch_name: "${{ needs.branch_name.outputs.safe }}"
-    secrets: inherit
+    runs-on: ubuntu-latest
+    outputs:
+        tag: ${{ steps.semver_tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: "0"
+
+      - name: "Generate semver tag and release"
+        id: semver_tag
+        uses: ministryofjustice/opg-github-actions/actions/semver@b8868247a908f74fafe1905701391580575a6d35 # v4.3.10
+        with:
+          create_release: false
+          default_bump: ${{ github.event_name == 'workflow_dispatch' && 'none' || 'minor' }}
+          prerelease: ${{ github.ref_name == 'main' && 'false' || 'true' }}
 
   build_scan_push:
-    needs: [branch_name, semver_tag]
+    needs: [semver_tag]
     name: "Build, scan and push the image"
     uses: ./.github/workflows/_docker_build_scan_push.yml
     with:
@@ -47,13 +52,11 @@ jobs:
   end:
     name: 'End of workflow'
     runs-on: 'ubuntu-latest'
-    needs: [branch_name, semver_tag, build_scan_push]
+    needs: [semver_tag, build_scan_push]
     steps:
       - name: "Output data"
         run: |
           echo "== BRANCH =="
-          echo "Raw: ${{ needs.branch_name.outputs.raw }}"
-          echo "Parsed: ${{ needs.branch_name.outputs.parsed }}"
-          echo "Alphanumeric: ${{ needs.branch_name.outputs.alphanumeric }}"
+          echo "Branch: ${{ needs.branch_name.outputs.branch }}"
           echo "== SEMVER =="
           echo "Tag: ${{ needs.semver_tag.outputs.tag }}"
