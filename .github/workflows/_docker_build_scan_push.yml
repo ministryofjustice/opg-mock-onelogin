@@ -96,11 +96,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           file: ${{ matrix.data.docker_build_directory }}/Dockerfile
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.docker_tags.outputs.tags }}
-
-      - name: Pull Image Locally for Scanning
-        run: docker image pull ${{ steps.docker_tags.outputs.tags }}
 
       - name: Snyk Scan
         uses: ministryofjustice/opg-github-actions/actions/snyk-scan@8dea82fc8b8e7ffca431f0fb83848d523147ccd8 # v4.5.0
@@ -115,3 +113,11 @@ jobs:
           sarif_file: test-results/snyk.sarif
           category: snyk-docker
 
+      - name: Push to ECR
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.data.docker_build_directory }}/Dockerfile
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
