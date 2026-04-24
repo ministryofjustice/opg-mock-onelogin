@@ -91,7 +91,7 @@ jobs:
           if ${{ inputs.build_latest }}; then
             echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:latest,$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG,$ECR_REGISTRY/$ECR_REPOSITORY:main-$SEMVER_TAG,$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           else
-            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
+            echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG,ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           fi
           echo "semver_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           echo "local_snyk_test_tag=$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
