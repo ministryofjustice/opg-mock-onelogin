@@ -64,16 +64,16 @@ jobs:
           role-duration-seconds: 900
           aws-region: eu-west-1
 
-      - name: Set up Docker
-        uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5.0.0
-        with:
-          daemon-config: |
-            {
-              "debug": false,
-              "features": {
-                "containerd-snapshotter": true
-              }
-            }
+      # - name: Set up Docker
+      #   uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5.0.0
+      #   with:
+      #     daemon-config: |
+      #       {
+      #         "debug": false,
+      #         "features": {
+      #           "containerd-snapshotter": true
+      #         }
+      #       }
 
       - name: ECR Login
         id: login_ecr
