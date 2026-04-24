@@ -110,10 +110,15 @@ jobs:
           load: true
           tags: ${{ steps.docker_tags.outputs.tags }}
 
+      - name: Debug built image
+        run: |
+          docker image ls
+          docker image inspect "${{ steps.docker_tags.outputs.local_snyk_test_tag }}"
+
       - name: Snyk Scan
         uses: ministryofjustice/opg-github-actions/actions/snyk-scan@2186f4ee10b7f2839e0c795dcd01c729e6d1d4c0 # v4.8.1
         with:
-          SNYK_TEST_IMAGE: ${{ steps.docker_tags.outputs.local_snyk_test_tag}}
+          SNYK_TEST_IMAGE: ${{ steps.docker_tags.outputs.local_snyk_test_tag }}
           SNYK_TOKEN: ${{ secrets.SNYK_OPG_ORG_TOKEN }}
           snyk_test_args: --serverity-threshold=high
 
