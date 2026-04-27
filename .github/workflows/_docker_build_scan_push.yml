@@ -56,11 +56,11 @@ jobs:
 
       - uses: unfor19/install-aws-cli-action@f5b46b7f32cf5e7ebd652656c5036bf83dd1e60c # 1.0.8
 
-      - name: Configure OIDC AWS credentials for ECR push
+      - name: Configure OIDC AWS credentials for ECR push and pull
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           role-to-assume: ${{ vars.OIDC_ECR_ROLE }}
-          role-session-name: opg-mock-onelogin-github-actions-ecr-push
+          role-session-name: opg-mock-onelogin-github-actions-ecr-push-pull
           role-duration-seconds: 900
           aws-region: eu-west-1
 
@@ -83,6 +83,7 @@ jobs:
             echo "tags=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
           fi
           echo "semver_tag=$ECR_REGISTRY/$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
+          echo "local_snyk_test_tag=$ECR_REPOSITORY:$SEMVER_TAG" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
@@ -90,23 +91,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - name: Build and push
+      - name: Docker Build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
           file: ${{ matrix.data.docker_build_directory }}/Dockerfile
-          push: true
-          tags: ${{ steps.docker_tags.outputs.tags }}
+          load: true
+          tags: ${{ steps.docker_tags.outputs.local_snyk_test_tag }}
 
-      - name: Pull Image Locally for Scanning
-        run: docker image pull ${{ steps.docker_tags.outputs.tags }}
+      - name: Debug built image
+        run: |
+          docker image ls
+          docker image inspect "${{ steps.docker_tags.outputs.local_snyk_test_tag }}"
 
       - name: Snyk Scan
-        uses: ministryofjustice/opg-github-actions/actions/snyk-scan@8dea82fc8b8e7ffca431f0fb83848d523147ccd8 # v4.5.0
+        uses: ministryofjustice/opg-github-actions/actions/snyk-scan@8dea82fc8b8e7ffca431f0fb83848d523147ccd8 #v4.5.0
         with:
-          SNYK_TEST_IMAGE: ${{ steps.docker_tags.outputs.semver_tag }}
+          SNYK_TEST_IMAGE: ${{ steps.docker_tags.outputs.local_snyk_test_tag }}
           SNYK_TOKEN: ${{ secrets.SNYK_OPG_ORG_TOKEN }}
+          snyk_test_args: --severity-threshold=high
 
       - name: Upload Snyk scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98 # v4.32.6
@@ -115,3 +118,11 @@ jobs:
           sarif_file: test-results/snyk.sarif
           category: snyk-docker
 
+      - name: Push to ECR
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.data.docker_build_directory }}/Dockerfile
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
