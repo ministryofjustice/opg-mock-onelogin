@@ -54,8 +54,6 @@ jobs:
         run: |
           go test -v ./...
 
-      - uses: unfor19/install-aws-cli-action@f5b46b7f32cf5e7ebd652656c5036bf83dd1e60c # 1.0.8
-
       - name: Configure OIDC AWS credentials for ECR push and pull
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
