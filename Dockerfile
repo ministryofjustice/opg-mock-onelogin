@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS build-env
+FROM golang:1.25-alpine3.23@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931 AS build-env
 
 RUN apk --no-cache add openssl
 
