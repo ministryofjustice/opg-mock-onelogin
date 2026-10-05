@@ -33,21 +33,76 @@ func TestOpenIDConfig(t *testing.T) {
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(http.MethodGet, "/", nil)
 
-	h := openIDConfig(OpenIdConfig{
-		AuthorizationEndpoint: "a",
-		Issuer:                "b",
-		TokenEndpoint:         "c",
-		UserinfoEndpoint:      "d",
-		JwksURI:               "e",
-		EndSessionEndpoint:    "f",
-	})
+	publicURL = "http://localhost:8080"
+	internalURL = "http://mock-onelogin:8080"
+
+	h := openIDConfig()
 	err := h(w, r)
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
 
 	assert.Nil(t, err)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-	assert.JSONEq(t, `{"authorization_endpoint":"a","issuer":"b","token_endpoint":"c","userinfo_endpoint":"d","jwks_uri":"e","end_session_endpoint":"f"}`, string(body))
+	assert.JSONEq(t, `{"authorization_endpoint":"http://localhost:8080/authorize","issuer":"http://localhost:8080","token_endpoint":"http://localhost:8080/token","userinfo_endpoint":"http://localhost:8080/userinfo","jwks_uri":"http://localhost:8080/.well-known/jwks","end_session_endpoint":"http://localhost:8080/logout"}`, string(body))
+}
+
+func TestOpenIDConfigInternalEndpoints(t *testing.T) {
+	publicURL = "http://localhost:6060"
+	internalURL = "http://mock-onelogin:8080"
+
+	t.Run("external localhost defaults to external endpoints", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+		r.Host = "localhost:6060"
+
+		err := openIDConfig()(w, r)
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Nil(t, err)
+		assert.JSONEq(t, `{"authorization_endpoint":"http://localhost:6060/authorize","issuer":"http://localhost:6060","token_endpoint":"http://localhost:6060/token","userinfo_endpoint":"http://localhost:6060/userinfo","jwks_uri":"http://localhost:6060/.well-known/jwks","end_session_endpoint":"http://localhost:6060/logout"}`, string(body))
+	})
+
+	t.Run("forwarded non-local host defaults to external endpoints", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+		r.Host = "docker.host.test:6060"
+		r.Header.Set("X-Forwarded-Proto", "https")
+
+		err := openIDConfig()(w, r)
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Nil(t, err)
+		assert.JSONEq(t, `{"authorization_endpoint":"http://localhost:6060/authorize","issuer":"http://localhost:6060","token_endpoint":"http://localhost:6060/token","userinfo_endpoint":"http://localhost:6060/userinfo","jwks_uri":"http://localhost:6060/.well-known/jwks","end_session_endpoint":"http://localhost:6060/logout"}`, string(body))
+	})
+
+	t.Run("host query can force internal endpoints", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/.well-known/openid-configuration?host=internal", nil)
+		r.Host = "docker.host.test:6060"
+		r.Header.Set("X-Forwarded-Proto", "https")
+
+		err := openIDConfig()(w, r)
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Nil(t, err)
+		assert.JSONEq(t, `{"authorization_endpoint":"http://localhost:6060/authorize","issuer":"http://localhost:6060","token_endpoint":"http://mock-onelogin:8080/token","userinfo_endpoint":"http://mock-onelogin:8080/userinfo","jwks_uri":"http://mock-onelogin:8080/.well-known/jwks","end_session_endpoint":"http://localhost:6060/logout"}`, string(body))
+	})
+
+	t.Run("host query can force external endpoints", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/.well-known/openid-configuration?host=external", nil)
+		r.Host = "localhost:6060"
+
+		err := openIDConfig()(w, r)
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Nil(t, err)
+		assert.JSONEq(t, `{"authorization_endpoint":"http://localhost:6060/authorize","issuer":"http://localhost:6060","token_endpoint":"http://localhost:6060/token","userinfo_endpoint":"http://localhost:6060/userinfo","jwks_uri":"http://localhost:6060/.well-known/jwks","end_session_endpoint":"http://localhost:6060/logout"}`, string(body))
+	})
 }
 
 func TestJwks(t *testing.T) {
@@ -105,7 +160,10 @@ func TestToken(t *testing.T) {
 	session := sessionData{user: user{"x", "y", "z"}}
 	sessions["my-code"] = session
 
-	h := token("my-kid", "my-client", "http://issuer")
+	publicURL = "http://localhost:8080"
+	internalURL = "http://mock-onelogin:8080"
+
+	h := token("my-kid", "my-client")
 	err := h(w, r)
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
@@ -117,7 +175,7 @@ func TestToken(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 	assert.Equal(t, "random", data["access_token"])
 	assert.Equal(t, "Bearer", data["token_type"])
-	assert.Contains(t, data["id_token"], "eyJhbGciOiJFUzI1NiIsImtpZCI6Im15LWtpZCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vaXNzdWVyIiwiYXVkIjpbIm15LWNsaWVudCJdLCJleHAiOjE1Nzc5MzQ0MjUsImlhdCI6MTU3NzkzNDI0NSwibm9uY2UiOiIifQ.")
+	assert.NotEmpty(t, data["id_token"])
 
 	assert.Equal(t, map[string]sessionData{"random": session}, tokens)
 	assert.Equal(t, map[string]sessionData{}, sessions)

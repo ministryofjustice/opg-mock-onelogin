@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +55,11 @@ var (
 
 	sessions = map[string]sessionData{}
 	tokens   = map[string]sessionData{}
+)
+
+const (
+	endpointModeInternal = "internal"
+	endpointModeExternal = "external"
 )
 
 type Handler func(w http.ResponseWriter, r *http.Request) error
@@ -172,10 +179,32 @@ func createSignedToken(kid, nonce, sub, clientId, issuer string) (string, error)
 	return t.SignedString(tokenSigningKey)
 }
 
-func openIDConfig(c OpenIdConfig) Handler {
+func openIDConfig() Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(c)
+		return json.NewEncoder(w).Encode(makeOpenIDConfig(r))
+	}
+}
+
+func endpointBaseURL(r *http.Request) string {
+	switch r.URL.Query().Get("host") {
+	case endpointModeInternal:
+		return internalURL
+	default:
+		return publicURL
+	}
+}
+
+func makeOpenIDConfig(r *http.Request) OpenIdConfig {
+	endpointBase := endpointBaseURL(r)
+
+	return OpenIdConfig{
+		Issuer:                publicURL,
+		AuthorizationEndpoint: publicURL + "/authorize",
+		TokenEndpoint:         endpointBase + "/token",
+		UserinfoEndpoint:      endpointBase + "/userinfo",
+		JwksURI:               endpointBase + "/.well-known/jwks",
+		EndSessionEndpoint:    publicURL + "/logout",
 	}
 }
 
@@ -285,8 +314,11 @@ func authorize(tmpl interface {
 			return fmt.Errorf("required query param 'redirect_uri' missing from request")
 		}
 
-		if redirectUri != serviceRedirectUrl {
-			return fmt.Errorf("redirect_uri does not match pre-defined redirect URL (in RL this is set with GDS at a service level). Got %s, want %s", redirectUri, serviceRedirectUrl)
+		redirectUrls := strings.Split(envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect"), ",")
+		validReturnUrl := slices.ContainsFunc(redirectUrls, func(u string) bool { return redirectUri == strings.TrimSpace(u) })
+
+		if !validReturnUrl {
+			return fmt.Errorf("redirect_uri does not match any pre-defined redirect URL (in RL this is set with GDS at a service level). Got %s, want one of [%s]", redirectUri, strings.Join(redirectUrls, ", "))
 		}
 
 		u, parseErr := url.Parse(redirectUri)
@@ -356,7 +388,7 @@ func authorize(tmpl interface {
 	}
 }
 
-func token(kid, clientId, issuer string) Handler {
+func token(kid, clientId string) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		code := r.PostFormValue("code")
 		accessToken := randomString("token-", 10)
@@ -366,7 +398,7 @@ func token(kid, clientId, issuer string) Handler {
 		delete(sessions, code)
 		tokens[accessToken] = session
 
-		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
+		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, publicURL)
 		if err != nil {
 			return fmt.Errorf("error creating jwt: %w", err)
 		}
@@ -384,6 +416,7 @@ func userInfo() Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		token := tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
 		if token.email == "" {
+			log.Println("email missing from token")
 			return nil
 		}
 
@@ -494,15 +527,6 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	c := OpenIdConfig{
-		Issuer:                publicURL,
-		AuthorizationEndpoint: publicURL + "/authorize",
-		TokenEndpoint:         internalURL + "/token",
-		UserinfoEndpoint:      internalURL + "/userinfo",
-		JwksURI:               internalURL + "/.well-known/jwks",
-		EndSessionEndpoint:    publicURL + "/logout",
-	}
-
 	templates, err := template.ParseFiles("web/templates/authorize.gohtml")
 	if err != nil {
 		return err
@@ -523,11 +547,11 @@ func run(logger *slog.Logger) error {
 		})
 	}
 
-	handle("/.well-known/openid-configuration", openIDConfig(c))
+	handle("/.well-known/openid-configuration", openIDConfig())
 	handle("/.well-known/jwks", jwks(tokenSigningKid, tokenSigningKey.PublicKey))
 	handle("/.well-known/did.json", did(controllerID, identityKID, privateKey.PublicKey))
 	handle("/authorize", authorize(templates))
-	handle("/token", token(tokenSigningKid, clientId, c.Issuer))
+	handle("/token", token(tokenSigningKid, clientId))
 	handle("/userinfo", userInfo())
 	handle("/logout", logout())
 
