@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,12 +25,12 @@ import (
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 var (
-	clientId           = envGet("CLIENT_ID", "theClientId")
-	internalURL        = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
-	port               = envGet("PORT", "8080")
-	publicURL          = envGet("PUBLIC_URL", "http://localhost:8080")
-	serviceRedirectUrl = envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect")
-	templateHeader     = os.Getenv("TEMPLATE_HEADER") == "1"
+	clientId       = envGet("CLIENT_ID", "theClientId")
+	internalURL    = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
+	port           = envGet("PORT", "8080")
+	publicURL      = envGet("PUBLIC_URL", "http://localhost:8080")
+	redirectURLs   = strings.Split(envGet("REDIRECT_URL", "http://localhost:5050/auth/redirect"), ",")
+	templateHeader = os.Getenv("TEMPLATE_HEADER") == "1"
 	// templateSub will allow the user to select how to choose the sub: fixed,
 	// random or email based.
 	templateSub = os.Getenv("TEMPLATE_SUB") == "1"
@@ -285,8 +287,10 @@ func authorize(tmpl interface {
 			return fmt.Errorf("required query param 'redirect_uri' missing from request")
 		}
 
-		if redirectUri != serviceRedirectUrl {
-			return fmt.Errorf("redirect_uri does not match pre-defined redirect URL (in RL this is set with GDS at a service level). Got %s, want %s", redirectUri, serviceRedirectUrl)
+		validReturnUrl := slices.ContainsFunc(redirectURLs, func(u string) bool { return redirectUri == strings.TrimSpace(u) })
+
+		if !validReturnUrl {
+			return fmt.Errorf("redirect_uri does not match any pre-defined redirect URL (in RL this is set with GDS at a service level). Got %s, want one of [%s]", redirectUri, strings.Join(redirectURLs, ", "))
 		}
 
 		u, parseErr := url.Parse(redirectUri)
@@ -384,7 +388,7 @@ func userInfo() Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		token := tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
 		if token.email == "" {
-			return nil
+			return errors.New("email missing from token")
 		}
 
 		//hard coded values need to pull out
@@ -494,15 +498,6 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	c := OpenIdConfig{
-		Issuer:                publicURL,
-		AuthorizationEndpoint: publicURL + "/authorize",
-		TokenEndpoint:         internalURL + "/token",
-		UserinfoEndpoint:      internalURL + "/userinfo",
-		JwksURI:               internalURL + "/.well-known/jwks",
-		EndSessionEndpoint:    publicURL + "/logout",
-	}
-
 	templates, err := template.ParseFiles("web/templates/authorize.gohtml")
 	if err != nil {
 		return err
@@ -523,11 +518,20 @@ func run(logger *slog.Logger) error {
 		})
 	}
 
-	handle("/.well-known/openid-configuration", openIDConfig(c))
+	config := OpenIdConfig{
+		Issuer:                publicURL,
+		AuthorizationEndpoint: publicURL + "/authorize",
+		TokenEndpoint:         internalURL + "/token",
+		UserinfoEndpoint:      internalURL + "/userinfo",
+		JwksURI:               internalURL + "/.well-known/jwks",
+		EndSessionEndpoint:    publicURL + "/logout",
+	}
+
+	handle("/.well-known/openid-configuration", openIDConfig(config))
 	handle("/.well-known/jwks", jwks(tokenSigningKid, tokenSigningKey.PublicKey))
 	handle("/.well-known/did.json", did(controllerID, identityKID, privateKey.PublicKey))
 	handle("/authorize", authorize(templates))
-	handle("/token", token(tokenSigningKid, clientId, c.Issuer))
+	handle("/token", token(tokenSigningKid, clientId, config.Issuer))
 	handle("/userinfo", userInfo())
 	handle("/logout", logout())
 
