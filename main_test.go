@@ -41,6 +41,7 @@ func TestOpenIDConfig(t *testing.T) {
 		JwksURI:               "e",
 		EndSessionEndpoint:    "f",
 	})
+
 	err := h(w, r)
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
@@ -454,6 +455,22 @@ func TestUserInfo(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 	assert.JSONEq(t, `{"sub":"my-sub","email":"my-email","email_verified":true,"phone":"01406946277","phone_verified":true,"updated_at":1311280970}`, string(body))
+}
+
+func TestUserInfoErrorsWhenNoEmailInToken(t *testing.T) {
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Add("Authorization", "Bearer my-token")
+
+	tokens["my-token"] = sessionData{
+		sub:   "my-sub",
+		email: "",
+	}
+
+	h := userInfo()
+	err := h(w, r)
+
+	assert.NotNil(t, err)
 }
 
 func TestUserInfoWithIdentity(t *testing.T) {
