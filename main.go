@@ -98,7 +98,8 @@ type TokenResponse struct {
 type JWTIdToken struct {
 	jwt.RegisteredClaims
 
-	Nonce string `json:"nonce"`
+	Nonce         string `json:"nonce"`
+	VectorOfTrust string `json:"vot"`
 }
 
 type UserInfoResponse struct {
@@ -153,7 +154,21 @@ func stringWithCharset(length int, charset string) string {
 	return string(bytes)
 }
 
-func createSignedToken(kid, nonce, sub, clientId, issuer string) (string, error) {
+func credentialTrustLevel(vtr string) string {
+	if vtr == "" {
+		return "Cl.Cm"
+	}
+
+	var vectors []string
+	if err := json.Unmarshal([]byte(vtr), &vectors); err != nil || len(vectors) == 0 {
+		return ""
+	}
+
+	level, _, _ := strings.Cut(vectors[0], ".P")
+	return level
+}
+
+func createSignedToken(kid, nonce, sub, vot, clientId, issuer string) (string, error) {
 	t := jwt.New(jwt.SigningMethodES256)
 
 	t.Header["kid"] = kid
@@ -166,7 +181,8 @@ func createSignedToken(kid, nonce, sub, clientId, issuer string) (string, error)
 			ExpiresAt: jwt.NewNumericDate(now().Add(time.Minute * 3)),
 			IssuedAt:  jwt.NewNumericDate(now()),
 		},
-		Nonce: nonce,
+		Nonce:         nonce,
+		VectorOfTrust: vot,
 	}
 
 	return t.SignedString(tokenSigningKey)
@@ -366,7 +382,7 @@ func token(kid, clientId, issuer string) Handler {
 		delete(sessions, code)
 		tokens[accessToken] = session
 
-		t, err := createSignedToken(kid, session.nonce, session.sub, clientId, issuer)
+		t, err := createSignedToken(kid, session.nonce, session.sub, credentialTrustLevel(session.vtr), clientId, issuer)
 		if err != nil {
 			return fmt.Errorf("error creating jwt: %w", err)
 		}
