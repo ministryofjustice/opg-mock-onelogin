@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -118,7 +119,7 @@ func TestToken(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 	assert.Equal(t, "random", data["access_token"])
 	assert.Equal(t, "Bearer", data["token_type"])
-	assert.Contains(t, data["id_token"], "eyJhbGciOiJFUzI1NiIsImtpZCI6Im15LWtpZCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vaXNzdWVyIiwiYXVkIjpbIm15LWNsaWVudCJdLCJleHAiOjE1Nzc5MzQ0MjUsImlhdCI6MTU3NzkzNDI0NSwibm9uY2UiOiIifQ.")
+	assert.Contains(t, data["id_token"], "eyJhbGciOiJFUzI1NiIsImtpZCI6Im15LWtpZCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vaXNzdWVyIiwiYXVkIjpbIm15LWNsaWVudCJdLCJleHAiOjE1Nzc5MzQ0MjUsImlhdCI6MTU3NzkzNDI0NSwibm9uY2UiOiIiLCJ2b3QiOiJDbC5DbSJ9.")
 
 	assert.Equal(t, map[string]sessionData{"random": session}, tokens)
 	assert.Equal(t, map[string]sessionData{}, sessions)
@@ -597,4 +598,46 @@ func TestLogout(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
 	assert.Equal(t, "http://somewhere", resp.Header.Get("Location"))
+}
+
+func TestCredentialTrustLevel(t *testing.T) {
+	testcases := map[string]struct {
+		vtr string
+		vot string
+	}{
+		"no vtr requested":           {vtr: "", vot: "Cl.Cm"},
+		"medium authentication":      {vtr: `["Cl.Cm"]`, vot: "Cl.Cm"},
+		"low authentication":         {vtr: `["Cl"]`, vot: "Cl"},
+		"medium identity confidence": {vtr: `["Cl.Cm.P2"]`, vot: "Cl.Cm"},
+		"low identity confidence":    {vtr: `["Cl.Cm.P1"]`, vot: "Cl.Cm"},
+		"not a JSON list of vectors": {vtr: "Cl.Cm", vot: ""},
+		"empty list of vectors":      {vtr: "[]", vot: ""},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.vot, credentialTrustLevel(tc.vtr))
+		})
+	}
+}
+
+func TestTokenVotIsTheCredentialTrustLevelOfTheRequestedVtr(t *testing.T) {
+	sessions["identity-code"] = sessionData{vtr: `["Cl.Cm.P2"]`}
+
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodPost, "/", strings.NewReader(url.Values{"code": {"identity-code"}}.Encode()))
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	err := token("my-kid", "my-client", "http://issuer")(w, r)
+	assert.Nil(t, err)
+
+	var response TokenResponse
+	assert.Nil(t, json.NewDecoder(w.Result().Body).Decode(&response))
+
+	claims := JWTIdToken{}
+	_, _, err = jwt.NewParser().ParseUnverified(response.IDToken, &claims)
+	assert.Nil(t, err)
+	assert.Equal(t, "Cl.Cm", claims.VectorOfTrust)
+
+	delete(tokens, "random")
 }
