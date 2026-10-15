@@ -621,6 +621,89 @@ func TestCredentialTrustLevel(t *testing.T) {
 	}
 }
 
+func signRequestObject(t *testing.T, claims jwt.MapClaims) string {
+	t.Helper()
+
+	// The mock does not verify the signature, so any key will do.
+	requestObject, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return requestObject
+}
+
+func validRequestObjectClaims() jwt.MapClaims {
+	return jwt.MapClaims{
+		"iss":                   "theClientId",
+		"client_id":             "theClientId",
+		"aud":                   "http://localhost:8080/authorize",
+		"exp":                   now().Add(5 * time.Minute).Unix(),
+		"response_type":         "code",
+		"scope":                 "openid email",
+		"redirect_uri":          "http://localhost:5050/auth/redirect",
+		"state":                 "jar-state",
+		"nonce":                 "jar-nonce",
+		"vtr":                   []string{"Cl.Cm"},
+		"code_challenge":        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		"code_challenge_method": "S256",
+	}
+}
+
+func TestAuthorizePostWithRequestObject(t *testing.T) {
+	query := url.Values{
+		"response_type": {"code"},
+		"scope":         {"openid email"},
+		"client_id":     {"theClientId"},
+		"request":       {signRequestObject(t, validRequestObjectClaims())},
+	}
+	form := url.Values{"subject": {"fixed"}, "email": {"dave@example.com"}}
+
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodPost, "/authorize?"+query.Encode(), strings.NewReader(form.Encode()))
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	err := authorize(nil)(w, r)
+	resp := w.Result()
+
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Equal(t, "http://localhost:5050/auth/redirect?code=random&state=jar-state", resp.Header.Get("Location"))
+	assert.Equal(t, sessionData{
+		email:         "dave@example.com",
+		nonce:         "jar-nonce",
+		sub:           "urn:fdc:mock-one-login:2023:fixed_value",
+		vtr:           `["Cl.Cm"]`,
+		codeChallenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+	}, sessions["random"])
+
+	delete(sessions, "random")
+}
+
+func TestAuthorizeRejectsAnInvalidRequestObject(t *testing.T) {
+	testcases := map[string]func(jwt.MapClaims){
+		"wrong client":         func(c jwt.MapClaims) { c["iss"] = "someone-else" },
+		"missing exp":          func(c jwt.MapClaims) { delete(c, "exp") },
+		"expired":              func(c jwt.MapClaims) { c["exp"] = now().Add(-time.Minute).Unix() },
+		"plain pkce challenge": func(c jwt.MapClaims) { c["code_challenge_method"] = "plain" },
+	}
+
+	for name, change := range testcases {
+		t.Run(name, func(t *testing.T) {
+			claims := validRequestObjectClaims()
+			change(claims)
+
+			query := url.Values{"request": {signRequestObject(t, claims)}}
+
+			w := httptest.NewRecorder()
+			r, _ := http.NewRequest(http.MethodPost, "/authorize?"+query.Encode(), strings.NewReader(url.Values{"subject": {"fixed"}}.Encode()))
+			r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+			assert.NotNil(t, authorize(nil)(w, r))
+		})
+	}
+}
+
 func TestTokenVotIsTheCredentialTrustLevelOfTheRequestedVtr(t *testing.T) {
 	sessions["identity-code"] = sessionData{vtr: `["Cl.Cm.P2"]`}
 
@@ -640,4 +723,38 @@ func TestTokenVotIsTheCredentialTrustLevelOfTheRequestedVtr(t *testing.T) {
 	assert.Equal(t, "Cl.Cm", claims.VectorOfTrust)
 
 	delete(tokens, "random")
+}
+
+func TestTokenWithPKCE(t *testing.T) {
+	// The code_verifier and code_challenge pair from RFC 7636 appendix B.
+	const codeChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+	testcases := map[string]struct {
+		codeVerifier string
+		status       int
+	}{
+		"matching verifier": {codeVerifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", status: http.StatusOK},
+		"wrong verifier":    {codeVerifier: "not-the-verifier", status: http.StatusBadRequest},
+		"missing verifier":  {codeVerifier: "", status: http.StatusBadRequest},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			sessions["pkce-code"] = sessionData{codeChallenge: codeChallenge}
+
+			form := url.Values{"code": {"pkce-code"}, "code_verifier": {tc.codeVerifier}}
+
+			w := httptest.NewRecorder()
+			r, _ := http.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+			r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+			err := token("my-kid", "my-client", "http://issuer")(w, r)
+
+			assert.Nil(t, err)
+			assert.Equal(t, tc.status, w.Result().StatusCode)
+
+			delete(sessions, "pkce-code")
+			delete(tokens, "random")
+		})
+	}
 }
