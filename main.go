@@ -244,6 +244,7 @@ func did(cid, kid string, publicKey ecdsa.PublicKey) Handler {
 	}
 }
 
+type authorizeParams struct {
 	redirectURI   string
 	state         string
 	nonce         string
