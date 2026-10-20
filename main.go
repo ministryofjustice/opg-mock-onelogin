@@ -80,6 +80,8 @@ type sessionData struct {
 	address CredentialAddress
 	// vtr defines which vector of trust should be returned with an identity
 	vtr string
+	// codeChallenge is the PKCE challenge the /token request's code_verifier must match
+	codeChallenge string
 }
 
 type OpenIdConfig struct {
@@ -242,6 +244,102 @@ func did(cid, kid string, publicKey ecdsa.PublicKey) Handler {
 	}
 }
 
+type authorizeParams struct {
+	redirectURI   string
+	state         string
+	nonce         string
+	vtr           string
+	claims        string
+	codeChallenge string
+}
+
+func readAuthorizeParams(r *http.Request) (authorizeParams, error) {
+	var params authorizeParams
+
+	if requestObject := r.FormValue("request"); requestObject != "" {
+		claims, err := parseRequestObject(requestObject)
+		if err != nil {
+			return authorizeParams{}, err
+		}
+
+		params = authorizeParams{
+			redirectURI:   stringClaim(claims, "redirect_uri"),
+			state:         stringClaim(claims, "state"),
+			nonce:         stringClaim(claims, "nonce"),
+			vtr:           jsonClaim(claims, "vtr"),
+			claims:        jsonClaim(claims, "claims"),
+			codeChallenge: stringClaim(claims, "code_challenge"),
+		}
+
+		if params.codeChallenge != "" && stringClaim(claims, "code_challenge_method") != "S256" {
+			return authorizeParams{}, fmt.Errorf("code_challenge_method must be S256")
+		}
+
+		return params, nil
+	}
+
+	params = authorizeParams{
+		redirectURI:   r.FormValue("redirect_uri"),
+		state:         r.FormValue("state"),
+		nonce:         r.FormValue("nonce"),
+		vtr:           r.FormValue("vtr"),
+		claims:        r.FormValue("claims"),
+		codeChallenge: r.FormValue("code_challenge"),
+	}
+
+	if params.codeChallenge != "" && r.FormValue("code_challenge_method") != "S256" {
+		return authorizeParams{}, fmt.Errorf("code_challenge_method must be S256")
+	}
+
+	return params, nil
+}
+
+func parseRequestObject(requestObject string) (jwt.MapClaims, error) {
+	claims := jwt.MapClaims{}
+	if _, _, err := jwt.NewParser().ParseUnverified(requestObject, claims); err != nil {
+		return nil, fmt.Errorf("request object could not be parsed: %w", err)
+	}
+
+	if stringClaim(claims, "iss") != clientId || stringClaim(claims, "client_id") != clientId {
+		return nil, fmt.Errorf("request object iss and client_id must be %s", clientId)
+	}
+
+	if !claims.VerifyExpiresAt(now().Unix(), true) {
+		return nil, fmt.Errorf("request object is missing exp or has expired")
+	}
+
+	return claims, nil
+}
+
+func stringClaim(claims jwt.MapClaims, name string) string {
+	value, _ := claims[name].(string)
+	return value
+}
+
+func jsonClaim(claims jwt.MapClaims, name string) string {
+	value, ok := claims[name]
+	if !ok || value == nil {
+		return ""
+	}
+
+	if text, ok := value.(string); ok {
+		return text
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+
+	return string(data)
+}
+
+// verifyCodeVerifier checks a PKCE code_verifier against the S256 code_challenge.
+func verifyCodeVerifier(codeVerifier, codeChallenge string) bool {
+	sum := sha256.Sum256([]byte(codeVerifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:]) == codeChallenge
+}
+
 type authorizeTemplateData struct {
 	Identity         bool
 	Header           bool
@@ -262,17 +360,22 @@ func authorize(tmpl interface {
 		useReturnCodes := false
 		returnAddress := false
 
-		if r.FormValue("claims") != "" {
+		params, err := readAuthorizeParams(r)
+		if err != nil {
+			return err
+		}
+
+		if params.claims != "" {
 			var claims struct {
 				UserInfo map[string]any `json:"userinfo"`
 			}
 
-			if err := json.Unmarshal([]byte(r.FormValue("claims")), &claims); err != nil {
+			if err := json.Unmarshal([]byte(params.claims), &claims); err != nil {
 				return fmt.Errorf("claims could not be unmarshalled")
 			}
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/coreIdentityJWT"]; ok {
-				returnIdentity = r.FormValue("vtr") == `["Cl.Cm.P2"]` || r.FormValue("vtr") == `["Cl.Cm.P1"]`
+				returnIdentity = params.vtr == `["Cl.Cm.P2"]` || params.vtr == `["Cl.Cm.P1"]`
 			}
 
 			if _, ok := claims.UserInfo["https://vocab.account.gov.uk/v1/returnCode"]; ok {
@@ -298,7 +401,7 @@ func authorize(tmpl interface {
 			})
 		}
 
-		redirectUri := r.FormValue("redirect_uri")
+		redirectUri := params.redirectURI
 		if redirectUri == "" {
 			return fmt.Errorf("required query param 'redirect_uri' missing from request")
 		}
@@ -318,7 +421,7 @@ func authorize(tmpl interface {
 
 		code := randomString("code-", 10)
 		q.Set("code", code)
-		q.Set("state", r.FormValue("state"))
+		q.Set("state", params.state)
 
 		email := r.FormValue("email")
 		if email == "" {
@@ -359,14 +462,15 @@ func authorize(tmpl interface {
 		}
 
 		sessions[code] = sessionData{
-			email:      email,
-			nonce:      r.FormValue("nonce"),
-			user:       user,
-			sub:        sub,
-			identity:   returnIdentity,
-			returnCode: returnCode,
-			address:    address,
-			vtr:        r.FormValue("vtr"),
+			email:         email,
+			nonce:         params.nonce,
+			user:          user,
+			sub:           sub,
+			identity:      returnIdentity,
+			returnCode:    returnCode,
+			address:       address,
+			vtr:           params.vtr,
+			codeChallenge: params.codeChallenge,
 		}
 
 		u.RawQuery = q.Encode()
@@ -382,6 +486,15 @@ func token(kid, clientId, issuer string) Handler {
 		accessToken := randomString("token-", 10)
 
 		session := sessions[code]
+
+		if session.codeChallenge != "" && !verifyCodeVerifier(r.PostFormValue("code_verifier"), session.codeChallenge) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			return json.NewEncoder(w).Encode(map[string]string{
+				"error":             "invalid_grant",
+				"error_description": "code_verifier does not match the code_challenge",
+			})
+		}
 
 		delete(sessions, code)
 		tokens[accessToken] = session
