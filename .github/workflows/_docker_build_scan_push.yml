@@ -55,7 +55,7 @@ jobs:
           go test -v ./...
 
       - name: Configure OIDC AWS credentials for ECR push and pull
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.OIDC_ECR_ROLE }}
           role-session-name: opg-mock-onelogin-github-actions-ecr-push-pull
@@ -64,7 +64,7 @@ jobs:
 
       - name: ECR Login
         id: login_ecr
-        uses: aws-actions/amazon-ecr-login@c962da2960ed15f492addc26fffa274485265950 # v2.0.2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
         with:
           registries: 311462405659
 
@@ -111,7 +111,7 @@ jobs:
           snyk_image_tag: main-cli-1.1308.3-v0.3.2
 
       - name: Upload Snyk scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98 # v4.32.6
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         with:
           sarif_file: test-results/snyk.sarif
