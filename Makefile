@@ -64,3 +64,7 @@ flow-identity:
 	if [ -z "$$access_token" ] || [ "$$access_token" = "null" ]; then echo 'failed to extract access token'; exit 1; fi; \
 	echo "\n/userinfo\n"; \
 	curl -sS $(HOST)/userinfo -H "Authorization: Bearer $$access_token" | jq
+
+.PHONY: update-secrets-baseline
+update-secrets-baseline:
+	detect-secrets scan --baseline .secrets.baseline

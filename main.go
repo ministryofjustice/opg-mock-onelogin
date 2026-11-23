@@ -19,13 +19,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 var (
-	clientId       = envGet("CLIENT_ID", "theClientId")
+	clientID       = envGet("CLIENT_ID", "theClientId")
 	internalURL    = envGet("INTERNAL_URL", "http://mock-onelogin:8080")
 	port           = envGet("PORT", "8080")
 	publicURL      = envGet("PUBLIC_URL", "http://localhost:8080")
@@ -300,12 +300,18 @@ func parseRequestObject(requestObject string) (jwt.MapClaims, error) {
 		return nil, fmt.Errorf("request object could not be parsed: %w", err)
 	}
 
-	if stringClaim(claims, "iss") != clientId || stringClaim(claims, "client_id") != clientId {
-		return nil, fmt.Errorf("request object iss and client_id must be %s", clientId)
+	if stringClaim(claims, "client_id") != clientID {
+		return nil, fmt.Errorf("request object iss and client_id must be %s", clientID)
 	}
 
-	if !claims.VerifyExpiresAt(now().Unix(), true) {
-		return nil, fmt.Errorf("request object is missing exp or has expired")
+	v := jwt.NewValidator(
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuer(clientID),
+		jwt.WithTimeFunc(now),
+	)
+
+	if err := v.Validate(claims); err != nil {
+		return nil, fmt.Errorf(err.Error())
 	}
 
 	return claims, nil
@@ -548,7 +554,7 @@ func userInfo() Handler {
 					RegisteredClaims: jwt.RegisteredClaims{
 						Issuer:    "https://identity.account.gov.uk/", // production identity url
 						Subject:   token.sub,
-						Audience:  []string{clientId},
+						Audience:  []string{clientID},
 						ExpiresAt: jwt.NewNumericDate(now().Add(time.Minute * 3)),
 						IssuedAt:  jwt.NewNumericDate(now()),
 						NotBefore: jwt.NewNumericDate(now()),
@@ -660,7 +666,7 @@ func run(logger *slog.Logger) error {
 	handle("/.well-known/jwks", jwks(tokenSigningKid, tokenSigningKey.PublicKey))
 	handle("/.well-known/did.json", did(controllerID, identityKID, privateKey.PublicKey))
 	handle("/authorize", authorize(templates))
-	handle("/token", token(tokenSigningKid, clientId, config.Issuer))
+	handle("/token", token(tokenSigningKid, clientID, config.Issuer))
 	handle("/userinfo", userInfo())
 	handle("/logout", logout())
 
